@@ -114,9 +114,11 @@ app/
   apps_script/Code.gs paste into your Sheet's Apps Script editor
 ```
 
-Push to GitHub with Pages enabled and `.github/workflows/pages.yml` publishes it,
-after checking the config parses and the bakes match the version the app reads.
-Or drag the folder onto any static host. There is no build.
+Push to GitHub and `.github/workflows/pages.yml` publishes it, after checking
+the config parses and the bakes match the version the app reads. Enable it once
+under **Settings ▸ Pages ▸ Source: GitHub Actions** — until you do, the deploy
+job fails with *Get Pages site failed*, which is the setting and not the
+workflow. Or drag the folder onto any static host. There is no build.
 
 ### 3 · Call — the browser
 
