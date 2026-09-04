@@ -28,7 +28,7 @@ Related code:
 | [`src/build_label_batches.py`](../src/build_label_batches.py) | cuts a ranked candidate table into batches |
 | [`src/build_batch_evidence.py`](../src/build_batch_evidence.py) | bakes the point values and the annual timeline into a batch |
 | [`src/label_rounds.py`](../src/label_rounds.py) | pulls the labels back and reads the yield |
-| [`ACTIVE_LEARNING.md`](https://github.com/Geethen/recoverHabloss/blob/main/docs/research/ACTIVE_LEARNING.md) | why the campaign is shaped this way; §AL7 covers this app |
+| [the repository README](../README.md) | the tour, the deployment steps, and why the campaign is shaped this way |
 
 ---
 
@@ -301,7 +301,7 @@ shape, and also plain **CSV** or **GeoJSON** — drag a file onto the window.
 
 ```json
 {
-  "campaign": "recover-habloss",
+  "campaign": "my-campaign",
   "batch_id": "cov001",
   "channel": "coverage",
   "instructions": "shown once when the batch opens",
@@ -412,11 +412,11 @@ pixels and be none of them, which is what it was until 2026-08-31: the
 interpreter judged one footprint, the dense series read a second, and the model
 predicts a third.
 
-This is not a style preference. The original RECOVER sampling called each 10 m
+This is not a style preference. The original sampling called each 10 m
 cell by majority cover, and the model these labels train is a 10 m model — so an
 interpreter judging the centre pixel is generating targets for a different
 question than the one the training set was defined on, invisibly, on the
-Cropland / Nature boundary the ledger already names as the change-F1 ceiling.
+Cropland / Nature boundary that is already the accuracy ceiling.
 The app said "judge the point, not the whole square" until 2026-08-31 and drew
 nothing at all at 10 m: the marker was a 2.6 px dot with a 13 px halo in
 *screen* pixels, identical at every zoom, naming no ground area. Two
@@ -465,9 +465,9 @@ way to tell "the legend is ambiguous here" from "the imagery is".
 Pick 2018 and 2024 from {Nature, Cropland, Artificial}; the transition is
 derived. **The classes are LUCAS as the campaign cribsheet states them**, and
 the legend links the full document from its summary and from inside the fold —
-`cribsheetUrl` in `config.js`, with the RECOVER cribsheet as the default so a
-dragged-in copy of `app/` still has it. Three of the cribsheet's rules decide
-most of the arguable points and the legend now teaches all three:
+`cribsheetUrl` in `config.js`, with this repository's own legend section as the
+default so a dragged-in copy of `app/` still has it. Three of the cribsheet's
+rules decide most of the arguable points and the legend now teaches all three:
 
 * **Ploughing, not grass.** Cropland is planted and cultivated, and it includes
   grassland *only* where it is cleared or sown inside a rotation. Permanent
@@ -939,8 +939,7 @@ different* the instant the point opens rather than half a minute later — the
 "connect Earth Engine" note now sits **beside** the coloured strip rather than
 in place of it.
 
-**On making it fast**, which was measured rather than guessed — see
-[`ACTIVE_LEARNING.md` §AL9](https://github.com/Geethen/recoverHabloss/blob/main/docs/research/ACTIVE_LEARNING.md). The thing to
+**On making it fast**, which was measured rather than guessed. The thing to
 know first: **a cold chip costs what it costs**, in the DIST-ALERT inspector
 this panel was ported from as much as here. That inspector's server computes
 nothing before a click; it feels instant because a previous click or

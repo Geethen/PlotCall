@@ -1,4 +1,4 @@
-"""Invariants of the labelling round-trip (https://github.com/Geethen/recoverHabloss/blob/main/docs/research/ACTIVE_LEARNING.md §AL7).
+"""Invariants of the labelling round-trip.
 
 These lock down the properties the campaign design leans on rather than the
 numbers: that the ranked order survives the cut into batches, that the manifest

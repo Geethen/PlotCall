@@ -23,6 +23,7 @@
 <meta http-equiv="Content-Security-Policy"
       content="object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>PlotCall · land-cover interpretation</title>
 <!-- Every host the labelling loop touches, opened before anything asks for a
      tile. Points are 5 km cells drawn globally, so consecutive points share no
@@ -1658,7 +1659,7 @@ try {
 </script>
 <script>
 // ════════════════════════════════════════════════════════════════════════════
-// RECOVER transition-labelling app
+// PlotCall - transition-labelling app
 //
 // WHAT THIS IS FOR
 // ----------------
@@ -1667,8 +1668,8 @@ try {
 // is the transition label the model trains on. Wayback supplies the two dates:
 // the 2018-vs-2024 swipe is the instrument, not a decoration.
 //
-// THREE THINGS IN HERE ARE DESIGN, NOT TASTE, AND ARE ANSWERED IN
-// https://github.com/Geethen/recoverHabloss/blob/main/docs/research/ACTIVE_LEARNING.md:
+// THREE THINGS IN HERE ARE DESIGN, NOT TASTE, AND ARE ANSWERED IN README.md,
+// "Design decisions that are not taste":
 //
 //  1. BATCHES ARE SMALL AND SEQUENTIAL. AL4 measured the same 2,000
 //     acquisitions at -0.003 change-F1 delivered as one batch and +0.031 as
@@ -1740,9 +1741,9 @@ if (CFG.title) document.title = CFG.title;
 }
 
 // ── the legend ──────────────────────────────────────────────────────────────
-// The only legend common to habloss_main, habloss_landwater and recover
-// (model_zoo.COARSE). Do not add a fourth class here without changing that map:
-// a label the training frame cannot coarsen is a label that gets dropped.
+// Replace this for your own campaign -- see "The legend is yours" in README.md.
+// Whatever goes here must be a legend the training frame can coarsen to: a
+// label the model cannot represent is a label that gets dropped.
 //: These follow the LUCAS typology as the campaign cribsheet states it, and
 //: `CRIBSHEET_URL` is linked from the legend so the full text is one click from
 //: the call. Three of them were under-specified against it and one contradicted

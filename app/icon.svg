@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-labelledby="t d">
+<title id="t">PlotCall</title>
+<desc id="d">A three-by-three grid of pixels with the centre one filled and checked: one cell, called.</desc>
+
+<rect width="64" height="64" rx="14" fill="#14212b"/>
+
+<g stroke="#3f5666" stroke-width="1.6" fill="none">
+  <rect x="12" y="12" width="13" height="13" rx="1.5"/>
+  <rect x="25.5" y="12" width="13" height="13" rx="1.5"/>
+  <rect x="39" y="12" width="13" height="13" rx="1.5"/>
+  <rect x="12" y="25.5" width="13" height="13" rx="1.5"/>
+  <rect x="39" y="25.5" width="13" height="13" rx="1.5"/>
+  <rect x="12" y="39" width="13" height="13" rx="1.5"/>
+  <rect x="25.5" y="39" width="13" height="13" rx="1.5"/>
+  <rect x="39" y="39" width="13" height="13" rx="1.5"/>
+</g>
+
+<rect x="24.5" y="24.5" width="15" height="15" rx="2" fill="#46c17f"/>
+<path d="M27.6 32.4 L30.7 35.5 L36.8 28.6" fill="none" stroke="#0d1b24"
+      stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

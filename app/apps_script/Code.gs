@@ -1,6 +1,6 @@
 /**
- * RECOVER labelling - Google Sheet backend
- * ========================================
+ * PlotCall - Google Sheet backend
+ * ==============================
  * Deploy: Extensions > Apps Script in the target Sheet, paste this file, then
  * Deploy > New deployment > Web app, "Execute as: Me", "Who has access:
  * Anyone". Copy the /exec URL into app/config.js as sheetUrl.

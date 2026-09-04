@@ -303,7 +303,7 @@ EMPTY_CONFIG = "window.LABEL_APP_CONFIG = {};"
 #: Only `experts` matters here -- `sheetUrl`, `campaign` and `manifest` all come
 #: from the query string in `open_app`.
 FIXTURE_CONFIG = """window.LABEL_APP_CONFIG = {
-  campaign: 'recover-habloss',
+  campaign: 'plotcall',
   manifest: 'batches/index.json',
   experts: [
     { id: 'e1', name: 'expert one' },

@@ -13,11 +13,11 @@ the app is not.
 
 What goes in, and why each of them
 ----------------------------------
-Section P of ``https://github.com/Geethen/recoverHabloss/blob/main/docs/research/TWOTOWER_RESEARCH.md`` is the standing verdict
-here: a single-date auxiliary path is bought on **error independence**, not on
-accuracy. Every dataset below gets its answers wrong in ways that have nothing
-to do with how the deployed AlphaEarth two-tower gets them wrong, which is the
-only reason any of it is worth an interpreter's attention. The model's own
+The standing verdict here is that a single-date auxiliary path is bought on
+**error independence**, not on accuracy. Every dataset below gets its answers
+wrong in ways that have nothing to do with how the deployed model gets them
+wrong, which is the only reason any of it is worth an interpreter's attention.
+The model's own
 posterior is not in this file and is not evidence -- it is the thing being
 corrected, and on the two visible map errors it is confident and wrong.
 
