@@ -1,0 +1,25 @@
+[project]
+name = "plotcall"
+version = "0.1.0"
+description = "A single-file web app for calling land cover at a point, plus the builders that feed it"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    # src/label_cell.py: the lon/lat -> UTM -> lon/lat round trip that names the
+    # labelled pixel. Imported inside `cell()`, so an install without it fails
+    # one call rather than one import.
+    "pyproj>=3.6",
+]
+
+[project.optional-dependencies]
+# The bakers. Everything else runs without Earth Engine; the app always does.
+bake = [
+    "earthengine-api>=1.5",
+    "pillow>=10.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "playwright>=1.40", "pillow>=10.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

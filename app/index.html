@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PlotCall · point interpretation</title>
+<!--
+  The Pages artifact root is `app/`, so the site root is this file and the app
+  is `label_app.html` beside it. Without this, https://<user>.github.io/<repo>/
+  is a 404 and the only working address is one nobody can guess -- which is the
+  address that goes out to the interpreters.
+
+  A redirect rather than a rename: `label_app.html` is the name in config.js,
+  in app/README.md, in the tests and in every bookmark already handed out.
+
+  The query string and the fragment are carried across, because the per-person
+  bookmark is `?expert=e1` and losing it silently drops the interpreter onto
+  the identity gate with nothing pre-selected.
+-->
+<link rel="canonical" href="label_app.html">
+<meta name="robots" content="noindex">
+<script>
+  location.replace('label_app.html' + location.search + location.hash);
+</script>
+<noscript>
+  <meta http-equiv="refresh" content="0; url=label_app.html">
+</noscript>
+<p style="font:14px/1.5 system-ui,sans-serif;margin:3rem auto;max-width:32rem">
+  Opening the interpretation app…
+  <a href="label_app.html">Continue</a> if this does not redirect.
+</p>

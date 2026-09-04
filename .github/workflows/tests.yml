@@ -1,0 +1,165 @@
+name: Labelling app tests
+
+# The suite that guards this app is a Playwright one, and until now nothing ran
+# it. Every contract it holds was learned from a fault in production -- the
+# annotation key, the blinding, the identity gate, the chip bake falling back,
+# the ramp agreeing between Python and JavaScript -- and a test nobody runs is a
+# comment. It is scoped to the three modules that need no scientific stack, so
+# it installs in under a minute and is worth blocking a merge on.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'src/label_cell.py'
+      - 'src/label_rounds.py'
+      - 'src/build_label_batches.py'
+      - 'src/build_batch_chips.py'
+      - 'src/build_batch_dense.py'
+      - 'src/build_batch_evidence.py'
+      - 'tests/test_label_app.py'
+      - 'tests/test_label_cell.py'
+      - 'tests/test_label_rounds.py'
+      - 'tests/test_chip_ramp.py'
+      - 'tests/test_label_batches.py'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'src/label_cell.py'
+      - 'src/label_rounds.py'
+      - 'src/build_label_batches.py'
+      - 'src/build_batch_chips.py'
+      - 'src/build_batch_dense.py'
+      - 'src/build_batch_evidence.py'
+      - 'tests/test_label_app.py'
+      - 'tests/test_label_cell.py'
+      - 'tests/test_label_rounds.py'
+      - 'tests/test_chip_ramp.py'
+      - 'tests/test_label_batches.py'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # This repository is PUBLIC, and the line is drawn by one question: does
+      # every browser that opens the app already have this value?
+      #
+      # `sheetUrl` and `submitToken` do, so they are committed on purpose
+      # (2026-09-04) and this step no longer refuses them -- the page downloads
+      # config.js, the /exec endpoint has only the powers Code.gs grants it, and
+      # the token is anti-spam rather than authentication. What no browser ever
+      # sees is the Earth Engine service-account PRIVATE KEY: the SDK refuses a
+      # browser-side private key, which is why Code.gs brokers a token instead,
+      # and it must never reach a commit in any file. `.githooks/pre-commit`
+      # catches that on the machine that holds the key; this catches it
+      # everywhere else.
+      - name: No private key is committed
+        run: |
+          fail=0
+          # Assembled from pieces so the pattern does not match this file.
+          key_re='BEGIN [A-Z ]*PRIVATE'' KEY|"private''_key"'
+          if git grep -nE "$key_re" -- \
+               ':!tests/*' ':!app/apps_script/Code.gs' ':!.githooks/*' \
+               ':!.github/workflows/*' \
+               >/dev/null 2>&1; then
+            echo "::error::a private key is committed to this repository"
+            fail=1
+          fi
+          # A config that does not parse deploys as "unconfigured" rather than
+          # as broken -- the same silent failure the Pages build checks for.
+          node --check app/config.js || fail=1
+          exit $fail
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # `test_chip_ramp.py` runs the app's own `comboBounds()` in node against
+      # the baker's `combo_bounds()`. It SKIPS cleanly where node is missing, so
+      # without this the job would go green having checked nothing.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # pillow is not optional here: `tests/test_label_app.py` builds its
+          # baked-sprite fixture at MODULE level, so without it the file does
+          # not even collect -- and the chip-bake tests it feeds are the ones
+          # that catch the strip silently falling back to live Earth Engine.
+          #
+          # pyproj likewise: `src/label_cell.py` imports it inside `cell()` to
+          # do the lon/lat -> UTM -> lon/lat round trip that names the labelled
+          # pixel. The lazy import is what hid it -- every module still
+          # imported, so the failure landed test by test rather than at
+          # collection, and the geo env has pyproj so it passed locally.
+          pip install pytest pandas playwright pillow pyproj
+          playwright install --with-deps chromium
+
+      - name: Syntax-check the app's inline scripts
+        run: |
+          python - <<'EOF'
+          import pathlib, re, subprocess, sys, tempfile, os
+          src = pathlib.Path("app/label_app.html").read_text(encoding="utf-8")
+          blocks = re.findall(r"<script>(.*?)</script>", src, re.S)
+          assert blocks, "no inline script found in label_app.html"
+          bad = 0
+          for i, b in enumerate(blocks):
+              with tempfile.NamedTemporaryFile("w", suffix=".js",
+                                               delete=False, encoding="utf-8") as f:
+                  f.write(b); p = f.name
+              r = subprocess.run(["node", "--check", p],
+                                 capture_output=True, text=True)
+              if r.returncode:
+                  print(f"::error::inline script block {i} does not parse")
+                  print(r.stderr); bad = 1
+              os.unlink(p)
+          sys.exit(bad)
+          EOF
+
+      # Inline handlers need every function they name to be a global, are
+      # invisible to tooling, and are what makes a `script-src` CSP impossible.
+      # They were removed in favour of one delegated dispatcher; this keeps
+      # them out.
+      - name: No inline event handlers
+        run: |
+          if grep -nE '\son(click|change|input|load|error|submit|mouse[a-z]+)="' \
+               app/label_app.html; then
+            echo "::error::inline event handler in label_app.html -- add a"
+            echo "::error::data-act entry to LOADING_ACTIONS, or wire it in JS."
+            exit 1
+          fi
+
+      # The browser fixtures SKIP rather than fail when chromium is missing,
+      # which is right on a bare checkout and wrong here: a job that skipped
+      # everything must not report success. One run, then read its summary --
+      # re-running the suite to check it would double the job.
+      - name: Test
+        run: |
+          set -o pipefail
+          # test_label_cell.py is the guard on what a label MEANS: it runs
+          # the app's own `s2Cell()` in node against `src/label_cell.py`, and
+          # the two disagreeing means the interpreter judges one footprint
+          # while the builders reduce over another. It was written and then
+          # not listed here, which is the state the header calls a comment.
+          pytest tests/test_label_app.py tests/test_chip_ramp.py \
+                 tests/test_label_cell.py tests/test_label_rounds.py \
+                 tests/test_label_batches.py -q --tb=short | tee result.txt
+          if grep -qE '^[0-9]+ skipped' result.txt; then
+            echo "::error::every test skipped -- chromium or node did not install"
+            exit 1
+          fi

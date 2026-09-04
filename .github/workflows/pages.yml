@@ -1,0 +1,173 @@
+name: Deploy labelling app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # Two ways to configure a deployment, and the repository chooses:
+      #
+      #   commit app/config.js   -- fine when the repo is yours. `sheetUrl` and
+      #                             `submitToken` are downloaded by every
+      #                             browser that opens the app, so committing
+      #                             them publishes nothing that was private.
+      #   set LABEL_APP_CONFIG_JS -- an Actions secret holding the whole file,
+      #                             for a repo whose collaborators should not
+      #                             see the campaign's backend.
+      #
+      # The secret wins when it is set. What must NEVER be either is the Earth
+      # Engine service-account private key: it lives in the Apps Script's
+      # Script Properties and the page is handed a one-hour token instead.
+      - name: Inject deployment config
+        env:
+          APP_CONFIG_JS: ${{ secrets.LABEL_APP_CONFIG_JS }}
+        run: |
+          if [[ -n "$APP_CONFIG_JS" ]]; then
+            printf '%s\n' "$APP_CONFIG_JS" > app/config.js
+            echo "config: from the LABEL_APP_CONFIG_JS secret"
+          else
+            echo "config: the committed app/config.js"
+          fi
+          # A config with a stray quote deploys a page whose config never
+          # defines LABEL_APP_CONFIG, and the app then reads as "unconfigured".
+          node --check app/config.js \
+            || { echo "::error::app/config.js is not valid JavaScript"; exit 1; }
+          grep -q 'LABEL_APP_CONFIG' app/config.js \
+            || { echo "::error::app/config.js does not set window.LABEL_APP_CONFIG"; exit 1; }
+          node -e '
+            global.window = {};
+            require("./app/config.js");
+            if (!(window.LABEL_APP_CONFIG || {}).sheetUrl)
+              console.log("::warning::no sheetUrl: labels stay in the browser "
+                + "and have to be exported by hand. Fine for a demo, a silent "
+                + "data-loss risk for a campaign.");
+          '
+
+      # The auxiliary overlays are served on the CAMPAIGN's Earth Engine
+      # account -- that is the whole point of `Code.gs`'s token broker -- and
+      # `eeAuthMode: 'auto'|'service'` with no `sheetUrl`/`eeTokenUrl` has
+      # nothing to mint from. It deploys an app that looks configured and hands
+      # every labeller a Google sign-in for layers they cannot reach, which is
+      # the same class of silent failure as the missing secret above.
+      - name: Check Earth Engine will run on the campaign account
+        run: |
+          node -e '
+            global.window = {};
+            require("./app/config.js");
+            const c = window.LABEL_APP_CONFIG || {};
+            const mode = c.eeAuthMode || "auto";
+            const broker = c.eeTokenUrl || c.sheetUrl || "";
+            if (mode === "oauth" || mode === "off") {
+              console.log("::warning::eeAuthMode is " + mode + ": interpreters "
+                + "will be asked to sign in to Google for the auxiliary "
+                + "overlays, and an unregistered Pages origin fails silently. "
+                + "A campaign wants eeAuthMode: \"service\".");
+            } else if (!broker) {
+              console.log("::warning::eeAuthMode is " + mode + " but the config "
+                + "sets neither sheetUrl nor eeTokenUrl, so there is nothing "
+                + "to mint a service-account token from: the Earth Engine "
+                + "overlays will not draw and the panel will offer a sign-in "
+                + "button instead.");
+            } else {
+              console.log("Earth Engine: " + mode + " on the deployment account.");
+            }
+          '
+
+      # The chips and the dense series are BAKED sidecars, and a batch deployed
+      # without them silently falls back to live Earth Engine -- or, with nobody
+      # signed in, to flat colour swatches. That is the failure this campaign
+      # already lost a day to, so it is checked here rather than discovered.
+      - name: Check the batches carry their bakes
+        run: |
+          fail=0
+          for batch in app/batches/*.json; do
+            case "$batch" in */index.json) continue;; esac
+            id=$(basename "$batch" .json)
+            for kind in chips dense; do
+              if grep -q "\"$kind\"" "$batch" && [[ ! -d "app/batches/${id}_${kind}" ]]; then
+                echo "::error::$batch declares $kind but app/batches/${id}_${kind}/ is missing"
+                fail=1
+              fi
+            done
+          done
+          exit $fail
+
+      # A directory that EXISTS is not a bake that is served. The app pins a
+      # version for each sidecar kind and falls back to live Earth Engine on
+      # anything else, so a batch left at the previous version deploys clean,
+      # looks deployed, and is the same flat-swatches failure as no bake at all
+      # -- one level further down. This is what shipped `ev1`/ESRI-2023 against
+      # an `ev2` builder (AL11.7) and what a `chip2` bake would do against the
+      # `chip3` marks (AL12.1).
+      - name: Check the bakes are the version the app reads
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          from pathlib import Path
+
+          def const(path, name, pattern):
+              m = re.search(pattern % re.escape(name), Path(path).read_text(), re.M)
+              assert m, f"{name} not found in {path}"
+              return m.group(1)
+
+          PY_CONST = r'^%s = "([^"]+)"'
+          JS_CONST = r"^const %s = '([^']+)'"
+          want = {}
+          for kind, src, name in (
+                  ("chips", "src/build_batch_chips.py", "CHIP_BAKE_VERSION"),
+                  ("dense", "src/build_batch_dense.py", "DENSE_BAKE_VERSION")):
+              builder = const(src, name, PY_CONST)
+              app = const("app/label_app.html", name, JS_CONST)
+              if builder != app:
+                  print(f"::error::{name} is {builder!r} in {src} and {app!r} in "
+                        f"the app -- every bake would fall back")
+                  sys.exit(1)
+              want[kind] = builder
+
+          fail = 0
+          for batch in sorted(Path("app/batches").glob("*.json")):
+              if batch.name == "index.json":
+                  continue
+              declared = json.loads(batch.read_text())
+              for kind, version in want.items():
+                  got = (declared.get(kind) or {}).get("version")
+                  if got is not None and got != version:
+                      print(f"::error::{batch} declares {kind} {got!r} but the app "
+                            f"reads {version!r} -- re-run the builder for it")
+                      fail = 1
+          sys.exit(fail)
+          PY
+
+      - name: Upload app artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

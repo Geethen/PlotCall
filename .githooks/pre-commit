@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Refuse a commit that would put a real SECRET into this PUBLIC repository.
+#
+# The line is drawn by one question: does every browser that opens the app
+# already have this value? If it does, committing it publishes nothing.
+#
+#   - `sheetUrl` and `submitToken` in app/config.js pass that test, and are
+#     committed on purpose (2026-09-04). The page downloads config.js, so every
+#     labeller has both. The /exec endpoint has only the powers Code.gs grants
+#     it, and the token is anti-spam rather than authentication -- it keeps junk
+#     rows out and draws no line between the two experts. This hook used to
+#     refuse them; blanking them hid them from nobody and cost a dragged-in copy
+#     of app/ that did not work.
+#   - the Earth Engine service-account PRIVATE KEY fails it, absolutely. No
+#     browser ever sees it -- the SDK refuses a browser-side private key, which
+#     is the whole reason Code.gs brokers a one-hour token -- so it must never
+#     reach a commit, in any file.
+#
+# Enable (once per clone):  git config core.hooksPath .githooks
+set -u
+
+fail=0
+
+# The pattern is assembled from pieces on purpose: spelled out in one string it
+# matches THIS LINE in its own staged diff, and the guard then refuses every
+# commit that touches itself.
+KEY_RE='^\+.*(BEGIN [A-Z ]*PRIVATE'' KEY|"private''_key")'
+if git diff --cached -U0 | grep -qE "$KEY_RE"; then
+  echo "pre-commit: a private key appears in the staged diff. Refusing."
+  echo "pre-commit: the Earth Engine key lives in the Apps Script's Script"
+  echo "pre-commit: Properties as EE_SERVICE_ACCOUNT_KEY, never in git."
+  fail=1
+fi
+
+exit $fail
