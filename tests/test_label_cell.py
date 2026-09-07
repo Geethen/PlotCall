@@ -2,8 +2,8 @@
 
 `src/label_cell.py` bakes the cell into the batch and reduces over it; `s2Cell`
 in `label_app.html` draws it, and computes it outright for a file dropped on the
-window. §AL8's rule applies: a Python double cannot police a contract the
-JavaScript disagrees with, so this runs the app's own functions in node against
+window. A Python double cannot police a contract the JavaScript disagrees with,
+so this runs the app's own functions in node against
 pyproj — not against a re-implementation.
 
 The two are allowed to differ by a millimetre (Snyder's series against PROJ);
@@ -42,14 +42,14 @@ def _js_span(start: str, end: str) -> str:
     The ellipsoid constants are three plain `const` lines; there is no brace to
     stop at and they are what the transforms are.
     """
-    text = APP.read_text()
+    text = APP.read_text(encoding="utf-8")
     i = text.index(start)
     j = text.index(end, i) + len(end)
     return text[i:j]
 
 
 def _js_block(start: str) -> str:
-    text = APP.read_text()
+    text = APP.read_text(encoding="utf-8")
     i = text.index(start)
     m = re.compile(r"^\};?$", re.M).search(text, i)
     assert m, f"no closing brace for {start!r}"
@@ -57,10 +57,9 @@ def _js_block(start: str) -> str:
 
 
 #: Places chosen for the things that break a zone rule, not for coverage:
-#: 32V (Bergen, Stavanger), the Svalbard row, both hemispheres, the antimeridian,
-#: a zone edge, and Oslo — which is what the deployed map is cut on.
+#: 32V, the Svalbard row, both hemispheres, the antimeridian and a zone edge.
 PLACES = [
-    (10.7522, 59.9139),      # Oslo
+    (10.7522, 59.9139),      # ordinary northern-hemisphere case
     (5.3221, 60.3913),       # Bergen — inside 32V, zone 31 by the naive rule
     (5.7331, 58.9700),       # Stavanger — 32V's southern half
     (15.6469, 78.2232),      # Longyearbyen — the Svalbard exception
@@ -70,7 +69,7 @@ PLACES = [
     (5.9999, 55.9),          # just below 32V, latitudinally
     (-70.6483, -33.4569),    # Santiago — southern hemisphere false northing
     (28.0473, -26.2041),     # Johannesburg
-    (112.7773, 37.7726),     # p0000 of b001
+    (112.7773, 37.7726),     # ordinary non-European UTM case
     (179.99, -16.5),         # the antimeridian, east side
     (-179.99, 64.5),         # the antimeridian, west side
     (-3.0001, 0.0),          # the equator, a zone edge
@@ -152,7 +151,7 @@ def test_the_cell_is_snapped_and_not_centred():
     x, y = fwd.transform(10.7522, 59.9139)
     assert c["x0"] <= x < c["x0"] + LC.CELL_M
     assert c["y0"] <= y < c["y0"] + LC.CELL_M
-    # ... and it is NOT the point-centred square, which is what §AL11 drew.
+    # It is not a point-centred square.
     assert abs((c["x0"] + LC.CELL_M / 2) - x) > 1e-9
 
 

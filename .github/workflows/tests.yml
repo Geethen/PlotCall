@@ -1,11 +1,7 @@
 name: Labelling app tests
 
-# The suite that guards this app is a Playwright one, and until now nothing ran
-# it. Every contract it holds was learned from a fault in production -- the
-# annotation key, the blinding, the identity gate, the chip bake falling back,
-# the ramp agreeing between Python and JavaScript -- and a test nobody runs is a
-# comment. It is scoped to the three modules that need no scientific stack, so
-# it installs in under a minute and is worth blocking a merge on.
+# The suite checks the annotation key, blinding, identity gate, baked-evidence
+# fallback, and agreement between the Python and JavaScript image recipes.
 on:
   push:
     branches: [main]
@@ -57,10 +53,10 @@ jobs:
       # This repository is PUBLIC, and the line is drawn by one question: does
       # every browser that opens the app already have this value?
       #
-      # `sheetUrl` and `submitToken` do, so they are committed on purpose
-      # (2026-09-04) and this step no longer refuses them -- the page downloads
-      # config.js, the /exec endpoint has only the powers Code.gs grants it, and
-      # the token is anti-spam rather than authentication. What no browser ever
+      # `sheetUrl` and `submitToken` may be present in a deployment because the page
+      # downloads them; the checked-in template leaves them blank. The endpoint
+      # has only the powers Code.gs grants it, and the token is anti-spam rather
+      # than authentication. What no browser ever
       # sees is the Earth Engine service-account PRIVATE KEY: the SDK refuses a
       # browser-side private key, which is why Code.gs brokers a token instead,
       # and it must never reach a commit in any file. `.githooks/pre-commit`

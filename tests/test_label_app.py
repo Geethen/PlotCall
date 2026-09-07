@@ -17,16 +17,14 @@ a diff -- which is why they are pinned here rather than described in a comment:
    `instructions` field got an overlay dropped back over it fifteen seconds in.
 5. **The annotation key did not carry the expert.** `Code.gs` upserted on
    `(campaign, batch_id, point_id)`, so the second reader's row REPLACED the
-   first -- deleting the inter-rater agreement measurement, which is the
-   campaign's only handle on the label noise that caps change-F1. The failure was
+   first -- deleting the inter-rater agreement measurement. The failure was
    invisible from Python, because the mock below implements the key the docs
    describe rather than the one `Code.gs` implemented. That is why the tests for
    it read the JavaScript source directly.
 
 The fix for (3) carries its own hazard, pinned here too: a second reader may be
 told *that* someone holds a point, and never *what they said*. Showing the first
-reading turns the agreement measurement -- the campaign's only handle on the
-label noise that caps change-F1 -- into a confirmation measurement.
+reading turns an independent agreement measurement into confirmation.
 
 These need a browser. They skip cleanly where there is not one, so `pytest -q`
 stays green on a bare checkout.
@@ -82,7 +80,7 @@ def _b001_is_baked() -> bool:
     path = APP_DIR / "batches" / "b001.json"
     if not path.exists():
         return False
-    batch = json.loads(path.read_text())
+    batch = json.loads(path.read_text(encoding="utf-8"))
     return bool(batch.get("dense")) and any(
         p.get("evidence", {}).get("t") for p in batch.get("points", []))
 
@@ -1893,7 +1891,7 @@ def test_the_private_key_is_never_in_the_source():
     The only way this file may reach a private key is through Script
     Properties, which are per-deployment and not in git.
     """
-    text = CODE_GS.read_text()
+    text = CODE_GS.read_text(encoding="utf-8")
     assert "-----BEGIN" not in text, "a private key has been pasted into Code.gs"
     src = _gs_function("eeKey_")
     assert "PropertiesService.getScriptProperties()" in src
@@ -1925,7 +1923,7 @@ def test_the_minted_token_carries_one_scope():
     service account can do in the project, handed to every browser that opens
     the page.
     """
-    text = CODE_GS.read_text()
+    text = CODE_GS.read_text(encoding="utf-8")
     assert ("var EE_SCOPE = 'https://www.googleapis.com/auth/earthengine';"
             in text)
     # comments stripped: the file explains at length why cloud-platform is not
@@ -1944,7 +1942,7 @@ def test_the_minted_token_carries_one_scope():
 # ---------------------------------------------------------------------------
 def _gs_function(name: str) -> str:
     """The source of one top-level function in Code.gs, braces matched."""
-    text = CODE_GS.read_text()
+    text = CODE_GS.read_text(encoding="utf-8")
     start = text.index(f"function {name}(")
     depth, i = 0, text.index("{", start)
     for j in range(i, len(text)):
@@ -1959,7 +1957,7 @@ def _gs_function(name: str) -> str:
 
 def _gs_block(needle: str) -> str:
     """The braced block introduced by the line containing `needle`."""
-    text = CODE_GS.read_text()
+    text = CODE_GS.read_text(encoding="utf-8")
     start = text.index(needle)
     depth, i = 0, text.index("{", start)
     for j in range(i, len(text)):
@@ -1975,10 +1973,8 @@ def _gs_block(needle: str) -> str:
 def test_the_annotation_key_carries_the_expert():
     """`keyOf_` must compose all four fields.
 
-    With three, expert B's save lands on expert A's row and the second reading is
-    deleted on arrival. ACTIVE_LEARNING.md states the key as
-    (campaign, batch_id, point_id, labeller) and warns in as many words that "a
-    dedupe on (batch, point) alone would silently delete the measurement".
+    With three fields, expert B's save lands on expert A's row and the second
+    independent reading is deleted on arrival.
     """
     src = _gs_function("keyOf_")
     for field in ("campaign", "batch_id", "point_id", "expert_id"):
@@ -1989,7 +1985,7 @@ def test_the_annotation_key_carries_the_expert():
 
 def test_expert_id_is_a_column_and_the_index_reads_it():
     """A key field that is not a column cannot be read back to build the index."""
-    text = CODE_GS.read_text()
+    text = CODE_GS.read_text(encoding="utf-8")
     assert "'expert_id'" in text.split("var COLS")[1].split("]")[0]
     # ...and the row index that doPost upserts through has to read that column,
     # not just the first three.
@@ -1999,9 +1995,8 @@ def test_expert_id_is_a_column_and_the_index_reads_it():
 def test_labelled_never_returns_an_answer():
     """`action=labelled` says WHO holds a point and nothing about WHAT.
 
-    Showing the first reading to the second reader turns the agreement
-    measurement -- the campaign's only handle on the label noise that caps
-    change-F1 -- into a confirmation measurement.
+    Showing the first reading to the second reader turns an independent
+    agreement measurement into confirmation.
     """
     block = _gs_block("if (action === 'labelled')")
     for column in ANSWER_COLS:
@@ -2262,9 +2257,8 @@ def test_a_batch_is_not_complete_while_a_point_is_deferred(browser, server):
 def test_confidence_is_required_before_a_call_can_be_saved(browser, server):
     """Both classes are not enough: `saveable()` also wants a confidence.
 
-    It was optional until 2026-08-31 and therefore mostly absent, which cost the
-    campaign the one thing that separates "the legend is ambiguous here" from
-    "the imagery is" when two experts disagree. Asserted through the KEYBOARD,
+    Confidence helps separate ambiguity in the legend from weak imagery when
+    readers disagree. Asserted through the keyboard,
     because the whole reason this is affordable is that 1/2/3 were already bound
     and merely untaught -- a mandatory field that needs the mouse is a different
     and much worse change.
@@ -2418,9 +2412,8 @@ def test_a_restored_row_is_filed_under_the_expert_who_made_it(browser, server):
 def test_rank_score_and_channel_are_hidden_until_the_point_is_saved(browser, server):
     """"rank 1, uncertainty" tells the interpreter the model finds this hard.
 
-    Descriptive context stays visible -- §AL-T's coverage gap is why these points
-    are in the batch and the interpreter should be able to see when they are in
-    it. What is hidden is why the acquisition function picked this one.
+    Descriptive context stays visible. What is hidden before the call is why
+    the acquisition function selected this point.
     """
     base, _ = server
     page, ctx = open_app(browser, base, who="vic", batch="/solo-blind.json")
@@ -2536,10 +2529,9 @@ EVIDENCE_BATCH = {
 
 
 #: A baked filmstrip: one sprite per point, `len(years)` cells wide, sliced in
-#: the browser. Built by `src/build_batch_chips.py`, which is the static-hosting
-#: equivalent of the DIST-ALERT inspector's `warm_ts_cache.py` -- the point of
-#: both is that a cold chip costs what it costs, so somebody pays before the
-#: interpreter looks. The pixels do not matter here; the geometry does.
+#: the browser. Built by `src/build_batch_chips.py` so remote computation occurs
+#: before the reader opens the point. The pixels do not matter here; the
+#: geometry does.
 def _sprite_png(cells=9, cell=8):
     import io
     try:
@@ -2572,7 +2564,7 @@ SPRITE_PNG = _sprite_png()
 def _js_const(name: str) -> str:
     """The literal a top-level `const NAME = ...;` is assigned in the app."""
     m = re.search(rf"^const {re.escape(name)} = (.+?);\s*$",
-                  APP_HTML.read_text(), re.M)
+                  APP_HTML.read_text(encoding="utf-8"), re.M)
     assert m, f"{name} not found in label_app.html"
     return m.group(1)
 
@@ -2716,7 +2708,7 @@ def test_a_permission_denial_is_never_reported_as_outside_coverage(browser, serv
           EE_LAYERS[key].build = () => ({
             image: { getMap: (vis, cb) => cb(null,
               "Permission 'earthengine.maps.create' denied on resource "
-              + "'projects/ee-gsingh' (or it may not exist).") }, vis: {} });
+              + "'projects/example-project' (or it may not exist).") }, vis: {} });
           eeSelectLayer(key);
         })()""")
         page.wait_for_function(
@@ -2820,11 +2812,9 @@ def test_the_legend_teaches_the_cribsheets_load_bearing_carve_outs(browser, serv
     contradicted a third.
 
     * **Ploughing, not grass.** Cropland includes temporary grassland inside a
-      rotation and EXCLUDES permanent pasture, which is Nature. This is the
-      boundary the ledger says caps change-F1 and the legend did not state it.
+      rotation and excludes permanent pasture, which is Nature.
     * **Bare ground is Nature unless it is being worked.** Sand and rock at a
-      mine or a development are Artificial. This is AL-T's error in one
-      sentence -- the largest on the map, and one the model is confident about.
+      mine or development are Artificial.
     * **A feature is Artificial for what it is, not what covers it** -- a
       grassed car park is Artificial, a park inside a city is not. The old hint
       said "urban green inside the built fabric", which is the opposite and is
@@ -3036,7 +3026,7 @@ def test_wayback_is_a_basemap_and_stays_under_the_overlays(browser, server):
 def test_the_two_layer_anchors_are_used_the_right_way_round():
     """The invariant, at the two call sites, so a future insertion cannot put an
     overlay under the archive by picking the wrong constant."""
-    src = APP_HTML.read_text()
+    src = APP_HTML.read_text(encoding="utf-8")
     wb = src[src.index("id: WB_LAYER"):]
     assert "ANCHOR_IMAGERY" in wb[:400] and "ANCHOR_OVERLAY" not in wb[:400]
     ee = src[src.index("id: eeLayerId(), type: 'raster'"):]
@@ -3338,8 +3328,7 @@ def test_the_evidence_renders_with_earth_engine_never_signed_in(browser, server)
             "document.querySelectorAll('#ev-strip .chip.tinted').length") == 9
 
         # the spectral profile reads the same payload, no further call, and is
-        # OPEN: it is the instrument for the Cropland / Nature boundary the
-        # ledger says caps change-F1, and it used to be behind a fold.
+        # open so it is available for difficult Cropland / Nature boundaries.
         assert page.evaluate(
             "document.querySelectorAll('#ev-spectral .spec-line').length") == 9
 
@@ -3583,7 +3572,7 @@ INHERITED_BY_DARK = {"--nature", "--cropland", "--artificial", "--brand-ramp",
 
 
 def _theme_blocks():
-    src = APP_HTML.read_text()
+    src = APP_HTML.read_text(encoding="utf-8")
     style = src[src.index("<style>"):src.index("</style>")]
     style = re.sub(r"/\*.*?\*/", "", style, flags=re.S)
 

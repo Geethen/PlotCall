@@ -1,62 +1,19 @@
-"""Pull a labelling round back out of the sheet and read what it actually bought.
+"""Pull a PlotCall round from a Sheet or CSV and report its outcomes.
 
-Without this the campaign is write-only. `build_label_batches.py` sends points
-out, `app/label_app.html` collects calls, and this closes the loop: it fetches
-the rows, writes them where the next round can exclude them, and computes the
-one number `ACTIVE_LEARNING.md` says the campaign is bought on and has never
-measured --
+The tool deduplicates corrections on the four-part annotation key, keeps
+independent readers distinct, and reports completion, timing, calibration,
+inter-rater agreement, and observed transition yield. Transition classes are
+derived from the returned rows rather than from a particular study legend.
 
-    **confirmed plots per point, per class, per channel**
-
--- together with the falsification test that section states in advance:
-
-> if the acquisition surface's realised confirmed-plot rate is not >= 2x the
-> equal-area baseline on the binding class, it is not worth the complexity and
-> the campaign should go back to random draws with the pilot's sizing.
-
-That test needs an equal-area arm in the same round to compare against, which is
-why `--placeholder` in `build_label_batches.py` builds one and why `random` is a
-first-class channel rather than a stand-in. With no `random` rows present the
-enrichment column is reported as unavailable rather than as 1.0 -- a missing
-control is not a passing control.
-
-It also reports the **calibration** batches separately -- rows carrying a known
-`reference`, worked by every interpreter before their first real batch. Read the
-pattern rather than the percentage: one person consistently calling long fallow
-`Cropland` is a briefing that can be fixed in ten minutes, and it looks nothing
-like the same headline number made of scattered singletons. Calibration rows are
-excluded from the yield table, because a reference plot is an exercise, not a
-plot the campaign found.
-
-Two things it also measures because they are cheap here and expensive later
--------------------------------------------------------------------------
-* **Inter-rater agreement**, from points labelled by more than one person. The
-  ledger's standing verdict is that the change-F1 ceiling is set by
-  `Cropland`/`Nature` label noise, so the campaign's own disagreement rate on
-  that boundary is the ceiling it is buying against. `build_label_batches.py
-  --experts` double-labels ~5% of every batch and this fills in.
-
-  **Everything here groups on `expert_id`, never on the display name.** "Ann",
-  "ann", "Ann " and "Anne" are four experts to a groupby and the failure is
-  silent: the agreement number is computed over nothing and reports a clean
-  100%. `expert_id` comes from the roster in `app/config.js`, is part of the
-  sheet's upsert key, and is the only thing here that identifies a person.
-* **Seconds per point**, from the app's own timing. This is what prices a
-  1,250-point round in interpreter-days, and the design's whole justification is
-  a ratio of compute hours to interpreter months.
+Use ``--binding`` only when the study has specified a transition of interest in
+advance. Its yield is then reported relative to the ``random`` control channel;
+the tool does not impose a pass/fail threshold.
 
 Usage
 -----
-    G=python   # whichever interpreter has the deps
-
-    # pull from the Apps Script web app and report
-    $G src/label_rounds.py --url https://script.google.com/.../exec
-
-    # or from files the interpreters exported by hand
-    $G src/label_rounds.py --csv app/exports/*.csv
-
-    # write the id list the next round should skip
-    $G src/label_rounds.py --url ... --exclude-out data/analysis_results/round1_ids.csv
+    python src/label_rounds.py --url https://script.google.com/.../exec
+    python src/label_rounds.py --csv exports/*.csv
+    python src/label_rounds.py --url ... --exclude-out prior_ids.csv
 """
 from __future__ import annotations
 
@@ -73,16 +30,7 @@ from project_paths import project_data_dir
 
 DEFAULT_OUT = project_data_dir("analysis_results") / "label_rounds.csv"
 
-#: The six change transitions, in the order the AL ledger reports them.
-CHANGE_CLASSES = ("Artificial -> Cropland", "Artificial -> Nature",
-                  "Cropland -> Artificial", "Cropland -> Nature",
-                  "Nature -> Artificial", "Nature -> Cropland")
-
-#: The class `PATCH_SAMPLING.md` sizes the round on -- 1,250 patches is binding
-#: on this one, so it is the class the falsification test is read on.
-BINDING = "Cropland -> Artificial"
-
-#: The equal-area arm every channel is compared against.
+#: The random arm used for an optional relative-yield comparison.
 BASELINE_CHANNEL = "random"
 
 
@@ -143,8 +91,8 @@ def dedupe(frame: pd.DataFrame) -> pd.DataFrame:
     One person re-labelling a point is a correction and only the last one counts;
     two *different* people labelling it is the agreement measurement and both are
     kept. Collapsing on (batch, point) alone would silently delete the second
-    reading and with it the only handle on label noise this campaign has -- which
-    is the same key the Apps Script upserts on, for the same reason.
+    reading and invalidate the agreement calculation. This is the same key the
+    Apps Script uses for upserts.
     """
     if "labelled_at" in frame.columns:
         frame = frame.sort_values("labelled_at")
@@ -160,10 +108,8 @@ def dedupe(frame: pd.DataFrame) -> pd.DataFrame:
 def split_calibration(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Calibration rows out of the campaign rows.
 
-    A calibration point is an onboarding exercise against a known answer, not an
-    acquisition. Leaving them in the yield table would credit whichever channel
-    the reference plots happened to come from with plots the campaign never
-    found.
+    A calibration point is an exercise against a reference interpretation, not
+    a sampled campaign result. It is excluded from the yield table.
     """
     if "calibration" not in frame.columns:
         return frame, frame.iloc[0:0]
@@ -172,12 +118,7 @@ def split_calibration(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def calibration_report(frame: pd.DataFrame) -> None:
-    """Agreement with the reference, per labeller, and where it broke.
-
-    Read the *pattern*, not the percentage. One interpreter consistently calling
-    long fallow `Cropland` is a briefing that can be fixed in ten minutes; the
-    same headline number made of scattered singletons is not.
-    """
+    """Agreement with the reference, per interpreter and confusion pair."""
     good = usable(frame)
     good = good.loc[good["reference"].notna()
                     & (good["reference"].astype(str) != "")]
@@ -213,10 +154,8 @@ def stage_rows(frame: pd.DataFrame, stage: str | None) -> pd.DataFrame:
 
 def _calibration_block(good: pd.DataFrame, who: str) -> None:
     agree = good["transition"].astype(str) == good["reference"].astype(str)
-    # Per expert, and the confusion PAIRS with it. The percentage on its own
-    # cannot tell one interpreter consistently calling long fallow `Cropland` --
-    # a briefing that can be fixed in ten minutes -- from the same headline
-    # number made of scattered singletons.
+    # Report confusion pairs because a percentage cannot distinguish a
+    # systematic class-boundary issue from scattered disagreements.
     for expert, block in good.groupby(who):
         hit = (block["transition"].astype(str)
                == block["reference"].astype(str)).sum()
@@ -297,7 +236,17 @@ def usable(frame: pd.DataFrame) -> pd.DataFrame:
                      & (frame["transition"].astype(str) != "")].copy()
 
 
-def yield_by_channel(frame: pd.DataFrame) -> pd.DataFrame:
+def change_classes(frame: pd.DataFrame) -> tuple[str, ...]:
+    """Return observed change transitions in stable order."""
+    good = usable(frame)
+    if good.empty or "is_change" not in good.columns:
+        return ()
+    changed = pd.to_numeric(good["is_change"], errors="coerce").fillna(0).eq(1)
+    return tuple(sorted(good.loc[changed, "transition"].astype(str).unique()))
+
+
+def yield_by_channel(frame: pd.DataFrame,
+                     classes: tuple[str, ...] | None = None) -> pd.DataFrame:
     """Confirmed plots per labelled point, per class, per channel.
 
     Per *point*, not per row: the denominator has to include the points that came
@@ -309,11 +258,10 @@ def yield_by_channel(frame: pd.DataFrame) -> pd.DataFrame:
     frame["channel"] = frame["channel"].fillna("(unstamped)")
     attempted = frame.groupby("channel")["point_id"].nunique()
     good = usable(frame)
+    classes = classes if classes is not None else change_classes(frame)
     counts = (good.groupby(["channel", "transition"])["point_id"].nunique()
               .unstack(fill_value=0))
-    for cls in CHANGE_CLASSES:
-        if cls not in counts.columns:
-            counts[cls] = 0
+    counts = counts.reindex(index=attempted.index, columns=classes, fill_value=0)
     rate = counts.div(attempted, axis=0)
     rate.insert(0, "points_attempted", attempted)
     return rate
@@ -334,17 +282,16 @@ def agreement(frame: pd.DataFrame) -> tuple[int, float, pd.DataFrame]:
 
     Counted on distinct experts rather than on rows: after `dedupe` there is one
     row per (batch, point, expert), so a row count would be the same thing --
-    but only as long as dedupe holds, and this is the number the whole campaign
-    is bought on. Say what is meant.
+    but only as long as dedupe holds. Say explicitly what is meant.
 
     "CANNOT INTERPRET" IS A CALL, AND DISAGREEING WITH IT IS A DISAGREEMENT.
-    This ran on `usable()` until 2026-08-31, which drops rows with no
-    transition -- so a point where one expert read `Cropland -> Nature` and the
-    other said the imagery would not support a call was not a disagreement, not
-    an agreement, and not a doubled point: it left the denominator entirely. That
+    Running this on `usable()` would drop rows with no transition, so a point
+    where one expert made a class call and the other said the imagery would not
+    support a call would not be a disagreement, an agreement, or a doubled
+    point: it would leave the denominator entirely. That
     is the single most informative pair in the set, because it is the one that
-    says the two of them are not looking at the same evidence, and it was the
-    one being discarded. The transition is compared as `(not interpretable)` so
+    says the two readers are not deriving the same result from the evidence.
+    The transition is compared as `(not interpretable)` so
     it lands in the confusion listing beside the legend pairs.
     """
     frame = frame.copy()
@@ -370,7 +317,7 @@ def agreement(frame: pd.DataFrame) -> tuple[int, float, pd.DataFrame]:
     return len(doubled), agreed / len(doubled), pd.DataFrame(rows)
 
 
-def report(all_rows: pd.DataFrame) -> None:
+def report(all_rows: pd.DataFrame, binding: str | None = None) -> None:
     frame, calibration = split_calibration(all_rows)
     if not calibration.empty:
         calibration_report(calibration)
@@ -378,6 +325,9 @@ def report(all_rows: pd.DataFrame) -> None:
         print("\nno campaign rows -- this round is calibration only")
         return
     good = usable(frame)
+    changes = change_classes(frame)
+    report_classes = changes + ((binding,) if binding and binding not in changes
+                                else ())
     print(f"\n{len(frame)} rows, {frame['point_id'].nunique()} distinct points, "
           f"{good['point_id'].nunique()} with a usable transition")
 
@@ -397,7 +347,8 @@ def report(all_rows: pd.DataFrame) -> None:
             # over a phone call sits in it -- so price the round on the median.
             print(f"\nseconds per point: median {seconds.median():.0f}, "
                   f"p90 {seconds.quantile(0.9):.0f}")
-            print(f"  a 1,250-point round is ~{1250 * seconds.median() / 3600:.1f} "
+            print(f"  {len(frame)} returned calls represent "
+                  f"~{len(frame) * seconds.median() / 3600:.1f} "
                   "interpreter-hours at the median")
 
     who = who_column(frame)
@@ -422,31 +373,32 @@ def report(all_rows: pd.DataFrame) -> None:
 
     print("\ntransitions:")
     for cls, count in good["transition"].value_counts().items():
-        mark = "  <- change" if cls in CHANGE_CLASSES else ""
+        mark = "  <- change" if cls in changes else ""
         print(f"  {cls:<26} {count:>5}{mark}")
-    for cls in CHANGE_CLASSES:
-        if cls not in set(good["transition"]):
-            print(f"  {cls:<26} {0:>5}  <- change, none returned")
 
-    print("\nconfirmed plots per point, by channel:")
-    rate = yield_by_channel(frame)
-    display = rate[["points_attempted"] + list(CHANGE_CLASSES)]
-    print(display.round(4).to_string())
-
-    boost = enrichment(rate, BINDING)
-    print(f"\nfalsification test, on the binding class ({BINDING}):")
-    if boost is None:
-        print(f"  unavailable -- no '{BASELINE_CHANNEL}' arm with a non-zero "
-              f"yield in this round.\n  The bar is 2x an equal-area draw, so it "
-              "cannot be read without one. Put an\n  equal-area batch in the "
-              "next round (build_label_batches.py --placeholder).")
+    print("\nobserved change transitions per point, by channel:")
+    rate = yield_by_channel(frame, report_classes)
+    if report_classes:
+        display = rate[["points_attempted"] + list(report_classes)]
+        print(display.round(4).to_string())
     else:
-        for channel, value in boost.items():
-            if channel == BASELINE_CHANNEL:
-                continue
-            verdict = "PASSES" if value >= 2 else "fails"
-            print(f"  {channel:<14} {value:>6.2f}x equal-area   {verdict} the "
-                  "2x bar")
+        print("  no change transitions returned")
+
+    if binding is None:
+        print("\nrelative yield: pass --binding 'Class A -> Class B' to compare "
+              f"one pre-specified transition with the '{BASELINE_CHANNEL}' "
+              "control")
+    else:
+        boost = enrichment(rate, binding)
+        print(f"\nrelative yield for {binding}:")
+        if boost is None:
+            print(f"  unavailable -- the '{BASELINE_CHANNEL}' control has no "
+                  "non-zero yield for this transition")
+        else:
+            for channel, value in boost.items():
+                if channel != BASELINE_CHANNEL:
+                    print(f"  {channel:<14} {value:>6.2f}x the "
+                          f"'{BASELINE_CHANNEL}' control")
 
     change_year_report(frame)
 
@@ -459,10 +411,8 @@ def report(all_rows: pd.DataFrame) -> None:
             for _, row in disagreements.head(20).iterrows():
                 print(f"    {row['point_id']:<12} {row['calls']}")
     else:
-        print("\n  Nothing to read. Double-label ~5% of each batch: the ledger's "
-              "standing\n  verdict is that Cropland/Nature label noise sets the "
-              "change-F1 ceiling,\n  and this is the only measurement of it the "
-              "campaign produces.")
+        print("\n  Nothing to read. Assign part of each batch to at least two "
+              "interpreters to estimate inter-rater agreement.")
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +428,10 @@ def main() -> None:
                         help="write the labelled point ids here, for the next "
                              "round's build_label_batches.py --exclude-labelled")
     parser.add_argument("--campaign", help="keep only this campaign's rows")
+    parser.add_argument("--binding",
+                        help="pre-specified transition to compare with the "
+                             f"'{BASELINE_CHANNEL}' control, e.g. "
+                             "'Class A -> Class B'")
     parser.add_argument("--no-report", action="store_true")
     args = parser.parse_args()
 
@@ -506,7 +460,7 @@ def main() -> None:
         print(f"wrote {len(ids)} ids -> {args.exclude_out}")
 
     if not args.no_report:
-        report(frame)
+        report(frame, binding=args.binding)
 
 
 if __name__ == "__main__":

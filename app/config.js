@@ -6,16 +6,14 @@
  * app alone. Every field is optional -- the app runs with all of them empty and
  * you export labels by hand.
  *
- * WHAT THIS FILE IS AND IS NOT. It configures a LOCAL serve. The published
- * Pages app does not read it: .github/workflows/pages.yml OVERWRITES it with
- * the LABEL_APP_CONFIG_JS Actions secret at build time, and a missing secret
- * fails the build rather than publishing an app with no backend. So a field
- * here is not a statement about the deployment -- ask the deployment:
+ * GitHub Pages uses this committed file unless the optional
+ * LABEL_APP_CONFIG_JS repository secret is set. When set, the workflow
+ * replaces this file during deployment. Verify a deployed backend directly:
  *
  *     curl '<sheetUrl>?action=ping'
  *       -> "token_required": …, "ee_service_account": …
  *
- * WHAT MAY BE COMMITTED, AND WHY. The line is drawn by one question: does
+ * BROWSER CONFIGURATION IS PUBLIC. The line is drawn by one question: does
  * every browser that opens the app already have this value? `sheetUrl` and
  * `submitToken` do -- the page downloads this file -- so committing them
  * publishes nothing that was private, and blanking them hides them from nobody

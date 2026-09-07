@@ -1,59 +1,22 @@
-"""Cut a ranked candidate table into labelling batches for ``app/label_app.html``.
+"""Cut candidate points into batches for ``app/label_app.html``.
 
-Why batches, and why small ones
--------------------------------
-This is not a packaging convenience. ``ACTIVE_LEARNING.md`` §AL4 measured the
-**same 2,000 acquisitions** at **-0.003** change-F1 delivered as one batch and
-**+0.031** delivered as twenty, against a paired floor of 0.016. A one-shot
-campaign throws the model-in-the-loop half of the design away entirely -- and if
-the labelling workflow genuinely cannot return batches, §AL4's own conclusion is
-to delete that half rather than run it once.
+Input order is preserved. If candidates were ranked upstream, the first batch
+contains the highest-ranked rows. This tool does not score or re-rank points.
+It writes ``app/batches/<prefix>NNN.json`` and updates the manifest read by the
+browser.
 
-§AL5 then separated batch *size* from the *schedule*: a hand-built
-explore-then-exploit schedule tied random, while simply cutting the same budget
-into more batches did not. §AL6 separated batch granularity from *start size* and
-found the start size is what matters. So the default here is 100 -- small enough
-that the model is refitted often, large enough to be a sitting for an
-interpreter -- and there is deliberately no schedule parameter.
-
-What this script does NOT decide
---------------------------------
-The *ranking*. Candidates arrive already scored, from whichever channel produced
-them, and this script preserves that order: batch 1 is ranks 1-100. The two
-channels are kept in **separate batches**, not interleaved, because they are two
-objectives with two different instruments and are priced on different metrics:
-
-    change-F1                 -> more labels; `entropy` in many small batches
-    the map's stable errors   -> coverage: `novelty` / `kcenter`, terrain-strat.
-    plots of Artificial -> Cropland -> the retrieval channel, kept small
-
-Mixing them into one batch makes the campaign unreadable: you cannot attribute a
-movement in `natStab_as_art` to the coverage points if the batch also carried
-retrieval points.
+Small batches allow an operator to inspect a completed round before issuing the
+next one. ``--experts`` assigns primary readers round-robin and marks a chosen
+fraction for independent second readings. ``--calibration`` creates teaching or
+qualification batches from points with agreed reference labels.
 
 Usage
 -----
-    G=python   # whichever interpreter has the deps
-
-    # a runnable demo batch from the 100-patch equal-area pilot draw
-    $G src/build_label_batches.py --placeholder
-
-    # real candidates, already ranked, 100 per batch
-    $G src/build_label_batches.py \
-        --candidates data/analysis_results/coverage_candidates.csv \
-        --channel coverage --batch-size 100 --prefix cov
-
-    # drop points already labelled in an earlier round before cutting
-    $G src/build_label_batches.py --candidates ... \
-        --exclude-labelled data/analysis_results/round1_labels.csv
-
-    # a calibration batch from plots that already have an agreed answer, which
-    # every interpreter works before their first real batch
-    $G src/build_label_batches.py --candidates <table-with-transitions> \
-        --calibration --reference-col transition --prefix cal
-
-Writes ``app/batches/<prefix>NNN.json`` plus ``app/batches/index.json``, which is
-the manifest the app's batch dropdown reads.
+    python src/build_label_batches.py --placeholder
+    python src/build_label_batches.py --candidates candidates.csv \
+        --channel coverage --batch-size 100 --experts e1,e2
+    python src/build_label_batches.py --candidates candidates.csv \
+        --exclude-labelled prior_labels.csv
 """
 from __future__ import annotations
 
@@ -83,58 +46,39 @@ def show(path: Path) -> str:
         return str(path)
 
 
-#: Columns the app understands directly. Everything else on a candidate row is
-#: passed through as ``meta`` and rendered in the "about this location" table --
-#: which is where terrain stratum, biome and WorldCover class belong, because
-#: §AL-T's coverage gap is the reason those points are in the batch. (``rank``
-#: and ``score`` are NOT in that table: the app hides them until the point is
-#: saved, because "rank 1, uncertainty" tells the interpreter the model finds
-#: this point hard before they have looked at it.)
+#: Columns the app understands directly. Other candidate fields become ``meta``
+#: shown in the "about this location" table. ``rank`` and ``score`` stay hidden
+#: until a call is saved so they cannot bias the interpretation.
 FIRST_CLASS = ("id", "lon", "lat", "channel", "rank", "score", "cell_km",
                "reference", "primary_expert", "required_readers")
 
-#: Fraction of every batch that gets a deliberate second reading. §AL asks for
-#: ~5%: inter-rater agreement is the campaign's only measurement of the label
-#: noise the ledger says caps change-F1, and it is computed from exactly these
-#: points. It is a property of the BATCH FILE, written here, because when it was
-#: a checkbox in the app somebody forgetting it in one direction produced
-#: duplicated work and forgetting it in the other produced zero overlap -- and
-#: neither is visible until the round report.
+#: Fraction of every batch that receives a deliberate second reading. Keeping
+#: this in the batch file makes the assignment reliable offline and measurable.
 DEFAULT_DOUBLE_FRAC = 0.05
 
-#: The three acquisition channels the ledger recognises, and what each is bought
-#: on. Used only to validate ``--channel`` and to stamp the batch.
 #: What each calibration stage is for, in the words the interpreter reads when
-#: the batch opens. Two stages, because one mixed set neither teaches reliably
-#: nor measures anything: being told the answer is what makes the legend stick,
-#: and being told the answer is also what makes the score meaningless.
+#: the batch opens. Teaching and qualification remain separate because feedback
+#: that teaches a protocol cannot also provide a blind assessment of it.
 CALIBRATION_NOTE = {
     "teach": (
         "Calibration, TEACHING stage. These points already have an agreed "
         "answer and you are told it after every call. Work them exactly as you "
-        "would a real batch. The purpose is to line everyone up on the legend "
-        "-- especially the Cropland / Nature boundary, which is where readers "
-        "disagree and which the ledger says caps the model. Do the "
-        "qualification set afterwards."
+        "would a real batch. The purpose is to align interpretations with the "
+        "class definitions. Do the qualification set afterwards."
     ),
     "qualify": (
         "Calibration, QUALIFICATION stage. These points have an agreed answer "
-        "and you will not be shown it until the end. Read the pattern in the "
-        "report rather than the percentage: one interpreter consistently "
-        "calling long fallow Cropland is a briefing that can be fixed in ten "
-        "minutes, and it looks nothing like the same headline number made of "
-        "scattered singletons."
+        "and you will not be shown it until the end. Read disagreement pairs "
+        "in the report as well as the percentage: a systematic class-boundary "
+        "issue differs from scattered disagreements."
     ),
 }
 
 CHANNELS = {
-    "coverage": "novelty / k-center, stratified -- buys map quality in the "
-                "stable classes, NOT change-F1",
-    "uncertainty": "entropy / BALD -- buys change-F1, and only in many small "
-                   "batches from a small start",
-    "retrieval": "a similarity channel for one rare class -- bought on "
-                 "confirmed plots per patch, kept separate and small",
-    "random": "the equal-area baseline every other channel has to beat",
+    "coverage": "a coverage-oriented acquisition channel",
+    "uncertainty": "an uncertainty-oriented acquisition channel",
+    "retrieval": "a similarity or retrieval-oriented acquisition channel",
+    "random": "a random control or baseline channel",
 }
 
 
@@ -407,15 +351,13 @@ def main() -> None:
     parser.add_argument("--candidates", type=Path,
                         help="ranked candidate table (.parquet/.csv/.geojson)")
     parser.add_argument("--placeholder", action="store_true",
-                        help="build a demo batch from the equal-area pilot draw")
+                        help="build the bundled demo batch")
     parser.add_argument("--channel", choices=sorted(CHANNELS),
                         help="which acquisition channel produced these; stamped "
                              "on every point so the rounds stay attributable")
     parser.add_argument("--batch-size", type=int, default=100,
-                        help="points per batch (default 100; AL4/AL6 -- small "
-                             "and sequential is the measured setting). Applies "
-                             "to calibration batches too: one size everywhere, "
-                             "so a batch is always a batch.")
+                        help="points per batch (default 100). Applies to "
+                             "calibration batches too.")
     parser.add_argument("--max-points", type=int, default=None,
                         help="take only the top N candidates before cutting")
     parser.add_argument("--prefix", default="b", help="batch id prefix")
@@ -454,9 +396,7 @@ def main() -> None:
     parser.add_argument("--double-frac", type=float,
                         default=DEFAULT_DOUBLE_FRAC,
                         help=f"fraction of each batch given a deliberate second "
-                             f"reading (default {DEFAULT_DOUBLE_FRAC}). §AL asks "
-                             "for ~5%%: this is the campaign's only measurement "
-                             "of the label noise that caps change-F1.")
+                             f"reading (default {DEFAULT_DOUBLE_FRAC})")
     parser.add_argument("--evidence", action="store_true",
                         help="bake the point values and the annual timeline "
                              "into every point (src/build_batch_evidence.py). "
@@ -491,9 +431,8 @@ def main() -> None:
     experts = ([e.strip() for e in args.experts.split(",") if e.strip()]
                if args.experts else None)
     if experts and len(experts) < 2 and args.double_frac > 0:
-        print("  note: one expert, so nothing can be double-read. The "
-              "agreement\n  number this campaign is bought on needs at least "
-              "two.")
+        print("  note: one expert, so nothing can be double-read. An "
+              "inter-rater agreement estimate needs at least two experts.")
 
     if args.calibration:
         if args.reference_col not in frame.columns:

@@ -1,10 +1,7 @@
-"""`label_rounds.agreement` — the number the whole campaign is bought on.
+"""Regression tests for inter-reader agreement.
 
-Inter-rater agreement is the campaign's only measurement of the label noise that
-`ACTIVE_LEARNING.md` says caps change-F1, so a fault in it is silent by
-construction: the report prints a clean percentage over the wrong denominator and
-nothing anywhere says so. There was no test file for this module until
-2026-08-31 (§AL11.7).
+A denominator error can silently produce a plausible percentage, so these tests
+cover interpretability, duplicate readings and identifiers reused across batches.
 """
 from __future__ import annotations
 

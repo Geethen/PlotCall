@@ -2,21 +2,16 @@
 
 WHY THIS IS A MODULE AND NOT A CONSTANT
 ---------------------------------------
-The call an interpreter makes is *majority cover of a 10 m cell*, because the
-targets this campaign grows were defined that way and the model it trains is a
-10 m model. Until 2026-08-31 nothing drew that cell; §AL11 drew it, but as a
-square **centred on the point**, which is a different square from any pixel:
-centred on the point it straddles four Sentinel-2 pixels and covers no one of
-them. So the interpreter judged one footprint, the dense series read a second,
-and the model predicts a third.
+The call an interpreter makes is *majority cover of a 10 m cell*. A square
+centred on the point is a different square from a source pixel: it can straddle
+four Sentinel-2 pixels and cover no one of them. The application, evidence and
+downstream model must therefore use the same snapped footprint.
 
 There is exactly one square that removes the ambiguity, and it is not a choice:
-the pixel itself. Sentinel-2 granules are on the UTM grid of their MGRS tile,
-with 10 m pixel edges on multiples of 10 m in that CRS -- and the deployed map
-is written on the same grid (``oslo_s2off_centre_m3s3_bf_merged2.tif`` is
-EPSG:32632, 10 m, origin 589230/6652940, both exact multiples of 10). Snapping
-the point's UTM coordinates down to a multiple of 10 therefore names the same
-square in the imagery, in the evidence and in the model's output.
+the pixel itself. Sentinel-2 granules use the UTM grid of their MGRS tile, with
+10 m pixel edges on multiples of 10 m in that CRS. Snapping the point's UTM
+coordinates down to a multiple of 10 therefore identifies the same square in
+the imagery, the extracted evidence and compatible model output.
 
 The point survives only as the *address* of that pixel. Nothing should read a
 buffer around it again.
@@ -34,11 +29,10 @@ WHERE THE GRID IS GENUINELY AMBIGUOUS
 -------------------------------------
 Sentinel-2 tiles overlap, and in the overlap a point sits in two granules whose
 UTM zones can differ; the two pixel grids are then rotated relative to each
-other and no square is "the" pixel. The zone rule below is MGRS's own (including
-the 32V and Svalbard exceptions, which matter here -- the study area is
-Norway), so it agrees with the granule the composite is dominated by almost
-everywhere. It is not worth more than that, and a 0.45 m disagreement at a zone
-edge is inside what the interpreter can see anyway.
+other and no square is "the" pixel. The zone rule below is MGRS's own, including
+the 32V and Svalbard exceptions, so it agrees with the granule the composite is
+dominated by almost everywhere. It is not worth more than that, and a 0.45 m
+disagreement at a zone edge is inside what the interpreter can see anyway.
 """
 from __future__ import annotations
 
@@ -49,9 +43,7 @@ CELL_M = 10.0
 def utm_epsg(lon: float, lat: float) -> int:
     """The EPSG code of the UTM zone MGRS puts this point in."""
     zone = int((lon + 180.0) // 6.0) + 1
-    # The two MGRS exceptions. 32V widens zone 32 over south-west Norway, and
-    # the Svalbard row widens 31/33/35/37 -- both are inside this campaign's
-    # working area, so neither is academic.
+    # The two MGRS exceptions: 32V and the Svalbard row.
     if 56.0 <= lat < 64.0 and 3.0 <= lon < 12.0:
         zone = 32
     elif 72.0 <= lat < 84.0:

@@ -6,8 +6,8 @@ tint under that sprite, and every dot on the annual chart, through
 invisible in exactly the way this project keeps getting caught by: the picture
 still appears, it is just a different picture from the colour behind it.
 
-So this does not re-implement the JavaScript in Python -- §AL8's lesson is that
-a Python double polices a contract the JavaScript may not have signed. It runs
+This does not re-implement the JavaScript in Python: a Python double cannot
+police a contract the JavaScript may not have signed. It runs
 the app's own function, extracted from `label_app.html`, in node.
 
 Skips cleanly where there is no node, so `pytest -q` stays green on a bare
@@ -38,7 +38,7 @@ NODE = shutil.which("node") or shutil.which("nodejs")
 def _js_const(name: str) -> str:
     """The literal a top-level `const NAME = ...;` is assigned."""
     m = re.search(rf"^const {re.escape(name)} = (.+?);\s*$",
-                  APP.read_text(), re.M)
+                  APP.read_text(encoding="utf-8"), re.M)
     assert m, f"{name} not found in label_app.html"
     return m.group(1)
 
@@ -51,7 +51,7 @@ def _js_block(start: str) -> str:
     with the semicolon, and matching only `}` ran straight past CHIP_RGB into
     the end of the next function.
     """
-    text = APP.read_text()
+    text = APP.read_text(encoding="utf-8")
     i = text.index(start)
     m = re.compile(r"^\};?$", re.M).search(text, i)
     assert m, f"no closing brace for {start!r}"
@@ -86,11 +86,11 @@ def test_a_rebake_busts_the_cache():
     looks correct, so the report comes back as "it still looks the same" with
     nothing to see on this side.
     """
-    src = APP.read_text()
+    src = APP.read_text(encoding="utf-8")
     assert "'?v=' + b.built" in src, "the sprite URL carries no bake stamp"
     for mod in (C, D):
         assert '"built": int(time.time())' in (
-            Path(mod.__file__).read_text()), f"{mod.__name__} writes no stamp"
+            Path(mod.__file__).read_text(encoding="utf-8")), f"{mod.__name__} writes no stamp"
 
 
 def test_the_fallback_says_which_condition_it_failed():
@@ -130,7 +130,8 @@ def test_the_two_ramps_are_the_same_ramp():
         "let STRETCH = null;",
         "function chipStretch() { return STRETCH; }",
         _js_block("function comboBounds(p, combo) {"),
-        "const cases = JSON.parse(process.argv[2]);",
+        "import fs from 'node:fs';",
+        "const cases = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));",
         "const out = cases.map(c => { STRETCH = c.stretch;",
         "  const b = comboBounds({}, c.combo);",
         "  return [b.min, b.max]; });",
@@ -155,13 +156,16 @@ def test_the_two_ramps_are_the_same_ramp():
         cases.append({"combo": combo, "stretch": stretch})
 
     script = Path(__file__).parent / "_ramp.mjs"
-    script.write_text(src)
+    data = Path(__file__).parent / "_ramp_cases.json"
+    script.write_text(src, encoding="utf-8")
+    data.write_text(json.dumps(cases), encoding="utf-8")
     try:
         got = json.loads(subprocess.run(
-            [NODE, str(script), json.dumps(cases)],
+            [NODE, str(script), str(data)],
             capture_output=True, text=True, check=True).stdout)
     finally:
-        script.unlink()
+        script.unlink(missing_ok=True)
+        data.unlink(missing_ok=True)
 
     for case, js in zip(cases, got):
         _, lo, hi = C.combo_bounds(case["combo"], case["stretch"])
@@ -266,4 +270,4 @@ def test_a_version_bump_rebakes_every_scheme_not_just_the_first(tmp_path,
     for scheme in schemes:
         n = sum(1 for slug, _ in drawn if slug == C.slug(scheme))
         assert n == 3, f"{scheme} re-baked {n}/3 points on a version bump\n{out}"
-    assert json.loads(path.read_text())["chips"]["version"] == C.CHIP_BAKE_VERSION
+    assert json.loads(path.read_text(encoding="utf-8"))["chips"]["version"] == C.CHIP_BAKE_VERSION

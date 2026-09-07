@@ -1,78 +1,23 @@
 #!/usr/bin/env python
-"""Bake a batch's dense Sentinel-2 series to static files, once, before anybody
-labels.
+"""Bake dense Sentinel-2 index series for a PlotCall batch.
 
-WHY THIS EXISTS
----------------
-It is `build_batch_chips.py` for the numbers instead of the pictures.
+The dense series contains clear-sky observations throughout each year rather
+than one annual composite. It can therefore show within-year variation that an
+annual summary cannot represent. Each point is written as a small sidecar file,
+so the batch JSON remains compact and the browser loads only the active point.
 
-The dense series is every clear-sky observation at the point, all seasons --
-not one composite a year -- and §AL9 put it in the app because it is the best
-instrument this app can carry for the Cropland / Nature boundary the ledger says
-caps change-F1. A cropped field is bare, then green, then cut; rough grazing is
-flat. One composite a year cannot see that by construction.
+``series_for`` must match ``denseFetchLive()`` in ``label_app.html``: collection,
+filters, mask, footprint and scale are one scientific recipe with a baked and a
+live execution path. The footprint is the labelled Sentinel-2 pixel described
+by ``src/label_cell.py``, not a neighbourhood around the point.
 
-It was live-and-on-demand, behind a button, on the grounds that it "cannot be
-baked -- nine years of Sentinel-2 at a point is a few hundred rows, and a
-hundred points of that is a batch file nobody can download". That is true of
-the batch JSON, which has to stay near a megabyte, and it stopped being the
-question the moment the chip bake established the SIDECAR: ~300 rows is ~10 KB
-per point, and a hundred of those is one directory nobody has to download at
-once.
+Usage
+-----
+    python src/build_batch_dense.py --batch app/batches/b001.json
+    python src/build_batch_dense.py --batch app/batches/b001.json --dry-run
 
-Three things follow from baking it:
-
-* It is **on by default**. A series the interpreter has to ask for is a series
-  they ask for *after* they have already made the call, which is the wrong way
-  round for the one instrument that separates the two classes it exists for.
-* It works with **Earth Engine never signed in**, like the rest of the evidence.
-* Nobody pays the 10-30 s. The live path is unchanged underneath, and a missing
-  or malformed sidecar falls straight back to it.
-
-THE RECIPE MUST NOT DRIFT
--------------------------
-`series_for` below is `denseFetchLive()` in label_app.html, in Python. Same
-collection, same pre-filter, same mask, same cell, same scale. Two recipes for
-one line is the same hazard as `growingSeason()` one level up, and here it would
-be worse: the baked series and the live fallback would disagree for the half of
-the batch that has a sidecar.
-
-THE FOOTPRINT IS THE LABELLING CELL
------------------------------------
-This series read a 30 m *radius* circle at 20 m until 2026-08-31 -- roughly 28x
-the area of the thing being labelled. The call the interpreter makes is majority
-cover of the 10 m cell (see the brief in label_app.html), so a chart describing a
-60 m neighbourhood was answering a different question from the buttons: a hedge,
-a track or a field margin outside the cell moved the line that was supposed to
-justify the call. Worse, it was invisible -- two interpreters disagreeing because
-one weighted the surroundings is indistinguishable from two interpreters
-disagreeing about the legend, and the agreement number is what this campaign is
-bought on.
-
-The cell is the Sentinel-2 PIXEL the point falls in (`src/label_cell.py`), and
-the read below is that pixel exactly: `reduceRegion` over the point at scale 10
-returns the value of the pixel containing it, in the granule's own grid. The
-square the app draws is the same pixel, snapped in UTM. Until 2026-08-31 this
-was a 10 m square *centred on the point*, which straddles four pixels and is
-none of them -- so the chart mixed up to four pixels' reflectance to justify a
-call on one of them.
-
-Deliberately NOT the s2cloudless join the composites use: it made a first
-attempt take 103 s for 269 scenes, because the join materialises a pair per
-scene. `MSK_CLDPRB` is the same s2cloudless product already carried as a band.
-
-    G=python   # whichever interpreter has the deps
-
-    $G src/build_batch_dense.py --batch app/batches/b001.json
-
-    # what it would do, without touching Earth Engine
-    $G src/build_batch_dense.py --batch app/batches/b001.json --dry-run
-
-Re-runs are resumable: a point whose sidecar is on disk **and was baked by the
-current recipe** is skipped. A `DENSE_BAKE_VERSION` bump re-bakes the whole
-directory on its own -- the app refuses to serve a sidecar it does not know the
-version of, so skipping them would strand the batch on the live path. `--force`
-re-bakes regardless.
+Runs are resumable. Existing sidecars made with the current
+``DENSE_BAKE_VERSION`` are skipped unless ``--force`` is used.
 """
 from __future__ import annotations
 
@@ -252,8 +197,7 @@ def main() -> None:
     if not meta:
         return
     batch["dense"] = meta
-    # Write-then-rename. /data is CIFS, and this project has already lost a path
-    # permanently to an interrupted in-place rewrite.
+    # Write then rename so interruption cannot leave a truncated batch file.
     tmp = args.batch.with_suffix(".json.part")
     tmp.write_text(json.dumps(batch, indent=1))
     os.replace(tmp, args.batch)

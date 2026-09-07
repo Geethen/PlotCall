@@ -97,7 +97,7 @@ def test_manifest_merges_across_rounds(tmp_path):
                            size=2, prefix="r2", outdir=tmp_path, instructions=None)
     write_manifest(second, tmp_path, merge=True)
 
-    entries = json.loads((tmp_path / "index.json").read_text())["batches"]
+    entries = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))["batches"]
     assert [e["batch_id"] for e in entries] == ["r1001", "r1002", "r2001"]
     assert {e["channel"] for e in entries} == {"coverage", "retrieval"}
 
@@ -110,16 +110,16 @@ def test_manifest_rewrite_replaces_a_rebuilt_batch(tmp_path):
     again = write_batches(candidates(4), campaign="c", channel="coverage",
                           size=4, prefix="r1", outdir=tmp_path, instructions=None)
     write_manifest(again, tmp_path, merge=True)
-    listed = json.loads((tmp_path / "index.json").read_text())["batches"]
+    listed = json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))["batches"]
     assert [e["batch_id"] for e in listed] == ["r1001"]
     assert listed[0]["n"] == 4
 
 
 def test_written_batch_round_trips(tmp_path):
-    write_batches(candidates(3), campaign="recover", channel="coverage", size=3,
+    write_batches(candidates(3), campaign="example", channel="coverage", size=3,
                   prefix="b", outdir=tmp_path, instructions="read this")
-    payload = json.loads((tmp_path / "b001.json").read_text())
-    assert payload["campaign"] == "recover"
+    payload = json.loads((tmp_path / "b001.json").read_text(encoding="utf-8"))
+    assert payload["campaign"] == "example"
     assert payload["channel"] == "coverage"
     assert payload["instructions"] == "read this"
     assert len(payload["points"]) == 3
@@ -195,10 +195,10 @@ def test_enrichment_is_unavailable_without_an_equal_area_arm():
 
 def test_enrichment_reads_against_the_equal_area_arm():
     rows = [("c", "b1", f"r{i}", "Cropland -> Artificial" if i < 1 else
-             "Nature -> Nature", 0, "", BASELINE_CHANNEL, "ann", "1")
+             "Nature -> Nature", 1 if i < 1 else 0, "", BASELINE_CHANNEL, "ann", "1")
             for i in range(10)]
     rows += [("c", "b2", f"c{i}", "Cropland -> Artificial" if i < 3 else
-              "Nature -> Nature", 0, "", "coverage", "ann", "1")
+              "Nature -> Nature", 1 if i < 3 else 0, "", "coverage", "ann", "1")
              for i in range(10)]
     boost = enrichment(yield_by_channel(returned(rows)), "Cropland -> Artificial")
     assert boost["coverage"] == pytest.approx(3.0)
@@ -219,7 +219,7 @@ def test_agreement_is_read_only_on_doubly_read_points():
 
 
 # ---------------------------------------------------------------------------
-# assignments (§AL7 T1.1): the overlap is a property of the batch FILE
+# assignments: the overlap is a property of the batch file
 #
 # It used to be a checkbox in the app. Forgetting it in one direction produces
 # duplicate work; forgetting it in the other produces zero overlap -- and zero
@@ -285,7 +285,7 @@ def test_the_manifest_carries_per_expert_counts(tmp_path):
                             experts=["e1", "e2"])
     assert set(entries[0]["assigned"]) == {"e1", "e2"}
     assert sum(entries[0]["assigned"].values()) >= 10
-    written = json.loads((tmp_path / "x001.json").read_text())
+    written = json.loads((tmp_path / "x001.json").read_text(encoding="utf-8"))
     assert written["experts"] == ["e1", "e2"]
     assert all("primary_expert" in p for p in written["points"])
 
@@ -297,7 +297,7 @@ def test_a_candidate_table_that_carries_assignments_keeps_them(tmp_path):
     frame["required_readers"] = ["e2|e1", "e2", "e1", "e1"]
     write_batches(frame, campaign="c", channel="coverage", size=4, prefix="y",
                   outdir=tmp_path, instructions=None, experts=["e1", "e2"])
-    written = json.loads((tmp_path / "y001.json").read_text())
+    written = json.loads((tmp_path / "y001.json").read_text(encoding="utf-8"))
     assert [p["primary_expert"] for p in written["points"]] == \
         ["e2", "e2", "e1", "e1"]
     assert written["points"][0]["required_readers"] == ["e2", "e1"]
@@ -346,7 +346,7 @@ def test_rows_without_an_expert_id_fall_back_to_the_name(capsys):
 
 
 # ---------------------------------------------------------------------------
-# calibration stages (§AL7 T1.7)
+# calibration stages
 # ---------------------------------------------------------------------------
 def test_the_two_calibration_stages_are_reported_apart():
     """A teaching set tells you the answer after every call, which is what makes
@@ -362,7 +362,7 @@ def test_the_two_calibration_stages_are_reported_apart():
 
 
 # ---------------------------------------------------------------------------
-# the growing season (§AL7 T2.1)
+# the growing season
 # ---------------------------------------------------------------------------
 def test_the_growing_season_flips_by_hemisphere():
     """A southern point composited over Jun-Sep is its DRY season.

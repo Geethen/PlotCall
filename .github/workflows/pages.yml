@@ -100,8 +100,7 @@ jobs:
 
       # The chips and the dense series are BAKED sidecars, and a batch deployed
       # without them silently falls back to live Earth Engine -- or, with nobody
-      # signed in, to flat colour swatches. That is the failure this campaign
-      # already lost a day to, so it is checked here rather than discovered.
+      # signed in, to flat colour swatches. Check this before publication.
       - name: Check the batches carry their bakes
         run: |
           fail=0
@@ -120,10 +119,8 @@ jobs:
       # A directory that EXISTS is not a bake that is served. The app pins a
       # version for each sidecar kind and falls back to live Earth Engine on
       # anything else, so a batch left at the previous version deploys clean,
-      # looks deployed, and is the same flat-swatches failure as no bake at all
-      # -- one level further down. This is what shipped `ev1`/ESRI-2023 against
-      # an `ev2` builder (AL11.7) and what a `chip2` bake would do against the
-      # `chip3` marks (AL12.1).
+      # looks deployed, and has the same flat-swatches failure as no bake. The
+      # builder and app constants must therefore agree.
       - name: Check the bakes are the version the app reads
         run: |
           python3 - <<'PY'

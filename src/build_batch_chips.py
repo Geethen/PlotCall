@@ -1,80 +1,25 @@
 #!/usr/bin/env python
-"""Bake a batch's Sentinel-2 filmstrips to static files, once, before anybody
-labels.
+"""Bake a batch's Sentinel-2 filmstrips to static files before labelling.
 
-WHY THIS EXISTS
----------------
-It is `scripts/warm_ts_cache.py` from the DIST-ALERT inspector, for a host with
-no server to cache in.
+Static hosting has no server-side image cache. Because all points in a batch
+are known in advance, their filmstrips can be prepared once instead of making
+the interpreter's first view wait for Earth Engine. Each point's annual images
+are stored in one horizontal sprite and sliced in the browser.
 
-That inspector feels instant and this app did not, and the reason is not a
-technique: `c2c_ts_server.py` computes **nothing** before a click either -- its
-own docstring says the cache fills lazily, one pixel at a time. What makes the
-difference is that somebody has already paid Earth Engine for that pixel, either
-by clicking it before or by `warm_ts_cache.py` walking the review list through
-the server ahead of the session. A cold chip costs what it costs. The only move
-anyone has is to stop the interpreter's look at a point from being the first
-one, and the app's in-session prefetch only manages that from the second point
-onwards, for someone already moving.
+The four RGB combinations can be baked. Index views (NDVI, NDMI and NBR) remain
+live because they are inexpensive normalized differences. Display bounds are
+estimated per point but shared across bands and years: this preserves relative
+colour and prevents year-specific auto-stretching from creating apparent
+change.
 
-Here the "review list" is known completely and in advance -- it is the batch --
-so the whole filmstrip can be paid for at build time, next to the evidence bake
-that already runs. After this, opening a point costs **one static file** and no
-Earth Engine at all.
-
-ONE FILE PER POINT, NOT NINE
-----------------------------
-Each point's nine years are baked into a single horizontal sprite and sliced in
-the browser with `background-position`.
-
-Worth knowing, because it looks like it contradicts the ledger: §AL9 measured
-one mosaicked request against nine parallel ones **live** and it LOST on four
-points of five -- Earth Engine parallelises nine separate requests across its
-own backend better than it parallelises one large thumbnail. That verdict is
-about Earth Engine's scheduler and does not carry over to a static file, where
-one request is simply one request. The idea was right and only the setting was
-wrong.
-
-ALL FOUR RGB SCHEMES
---------------------
-The first version baked the default scheme only, on an estimate of ~40 KB per
-point and "30 MB for six schemes almost nobody switches to". The measured bake
-is **24 KB median**, so the four three-band schemes are ~10 MB for a 100-point
-batch -- and the thing the estimate was trading away turned out to be sharp:
-switching scheme on an unbaked one drops to live Earth Engine at ~30 s a point,
-or to no image at all for anyone not signed in. The index schemes (NDVI/NDMI/
-NBR) are still live: they are one normalised difference through a ramp, they do
-not clip, and they are cheap.
-
-THE RAMP IS PER POINT
----------------------
-See `STRETCH_PCT`. The fixed bounds in `COMBOS` are a single ramp for a global
-draw and they saturate: a quarter of the chip1 bake of b001 was one flat colour.
-The ramp is now measured from each point's own nine years, ONE ramp shared by
-the three channels so hue -- which the legend and the tips teach as a convention
--- is preserved, and shared by the years so the strip stays a change instrument.
-
-    G=python   # whichever interpreter has the deps
-
-    # the usual: bake all four schemes for a batch, then rewrite the batch
-    $G src/build_batch_chips.py --batch app/batches/b001.json \
+Usage
+-----
+    python src/build_batch_chips.py --batch app/batches/b001.json \
         --combo SWIR1/NIR/GREEN NIR/RED/GREEN NIR/SWIR1/RED RED/GREEN/BLUE
+    python src/build_batch_chips.py --batch app/batches/b001.json --dry-run
 
-    # just the default, a wider footprint, and the old global ramp
-    $G src/build_batch_chips.py --batch app/batches/b001.json \
-        --width 1280 --stretch fixed
-
-    # what it would do, without touching Earth Engine
-    $G src/build_batch_chips.py --batch app/batches/b001.json --dry-run
-
-Re-runs are **resumable**: a point whose sprite is on disk **and was drawn by
-the current `CHIP_BAKE_VERSION`** is skipped — a version bump re-bakes the
-whole directory on its own, because the app refuses to serve sprites it does
-not know the version of and skipping them would strand the batch on the live
-path. Otherwise: a point whose sprite is already on disk is skipped,
-which matters because a hundred points is 10-60 minutes of Earth Engine and a
-revoked token halfway through should not mean starting again. `--force`
-re-bakes.
+Runs are resumable. Existing sprites made with the current
+``CHIP_BAKE_VERSION`` are skipped unless ``--force`` is used.
 """
 from __future__ import annotations
 
@@ -106,10 +51,8 @@ from build_batch_evidence import growing_season
 #: interpreter two different footprints for one call.
 CHIP_BAKE_VERSION = "chip3"
 
-#: MUST MATCH `CHIP_SCENE_CAP` in label_app.html. The cap is the measured
-#: difference between a 34 s filmstrip and a 5 s one (§AL9), and it costs a
-#: median 0.002 relative reflectance at the plot. The SEASON is what must not
-#: drift, and it comes from `growing_season` above -- imported, never restated.
+#: MUST MATCH `CHIP_SCENE_CAP` in label_app.html. The season comes from
+#: `growing_season` above so baked and live paths use the same time window.
 SCENE_CAP = 12
 
 #: MUST MATCH `CHIP_DIM`. The strip cell is 88 CSS px; 176 covers a 2x display.
@@ -135,14 +78,8 @@ COMBOS = {
 
 #: THE STRETCH IS PER POINT, AND SHARED BY ALL NINE YEARS.
 #:
-#: The fixed `min`/`max` in COMBOS above are one linear ramp for a GLOBAL draw,
-#: and 3500 DN is 0.35 reflectance. SWIR1 over bare and arid ground and NIR over
-#: dense canopy both run 0.35-0.5, so two of three channels peg at 255 while
-#: Green (~0.08) does not -- which is why a desert point bakes as flat cream and
-#: a lake as flat black. Measured on the chip1 bake of b001, over all 900
-#: year-cells: 55 cells more than half-saturated, 38 more than half-floored, 101
-#: more at sd < 6, and a MEDIAN 98th percentile of 252/255. A quarter of the
-#: filmstrip was one colour, and the interpreter cannot read what is not there.
+#: The fixed `min`/`max` values in COMBOS can saturate bright or dark scenes.
+#: Per-point bounds retain useful contrast across geographically varied data.
 #:
 #: Per band, per point, from the point's own nine years -- and NEVER per year.
 #: A per-year auto-stretch would renormalise each cell independently, which is
@@ -286,17 +223,10 @@ def combo_bounds(combo: str, stretch: dict | None):
     before an image lands is mixed through the same numbers, and a tint that
     disagrees with its own sprite is a lie about the pixel.
 
-    THE THREE CHANNELS SHARE THE RAMP, and this is the whole of the design.
-    Stretching each band to its own percentiles is the textbook move and it was
-    tried first: it is a decorrelation stretch, it changes HUE, and on the trial
-    bake it turned p0000's green fields magenta and made p0022 cycle yellow /
-    black / teal / blue across nine years of an unchanging desert. Two things
-    were wrong with it. Hue is a *convention* here -- the tips and the legend
-    teach "vegetation is green in SWIR/NIR/GREEN", and a chip that renders the
-    convention differently per point is teaching the interpreter nothing. And a
-    narrow per-band ramp turns the few-hundred-DN atmospheric drift between
-    years into full-scale colour swings, i.e. it manufactures change, which is
-    the one thing this filmstrip must never do.
+    The three channels share one ramp. Stretching each band independently is a
+    decorrelation stretch that changes hue. Using narrow, year-specific bounds
+    can also turn small atmospheric differences into large colour differences,
+    which is inappropriate for a change-comparison filmstrip.
 
     An affine transform applied identically to all three channels is an exposure
     and contrast adjustment, not a recolouring. `lo` is the darkest of the three
@@ -590,10 +520,7 @@ def main() -> None:
             batch["chips"] = meta
     if not meta:
         return
-    # Write-then-rename. /data is CIFS, and this project has already lost a path
-    # permanently to an interrupted in-place rewrite; the bake that precedes
-    # this is 10-60 minutes of Earth Engine and must not end by truncating the
-    # batch it was baked for.
+    # Write then rename so interruption cannot leave a truncated batch file.
     tmp = args.batch.with_suffix(".json.part")
     tmp.write_text(json.dumps(batch, indent=1))
     os.replace(tmp, args.batch)

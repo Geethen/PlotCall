@@ -1,102 +1,38 @@
-"""Bake the per-point evidence into a labelling batch, at build time.
+"""Bake per-point evidence into a PlotCall batch.
 
-Why baked, and why this file exists
------------------------------------
-``app/label_app.html`` is hosted statically -- a folder on a bucket, no
-always-on service -- and Earth Engine sign-in is on the critical path for
-*imagery only*. Everything an interpreter needs that is not a picture is
-therefore computed **once, here, at batch build time** and carried inside the
-batch JSON: point values, an annual index timeline, an annual land-cover
-sequence, terrain and water. The whole labelling loop renders and works with
-Earth Engine never signed in. Losing the Sentinel-2 chips is acceptable; losing
-the app is not.
+PlotCall is served as static files. This builder computes evidence once before
+interpretation so the main workflow does not depend on an interactive Earth
+Engine session. The batch receives point values, annual spectral summaries,
+annual land-cover values, terrain and water context. Filmstrip images and dense
+time series are written separately by the other builders.
 
-What goes in, and why each of them
-----------------------------------
-The standing verdict here is that a single-date auxiliary path is bought on
-**error independence**, not on accuracy. Every dataset below gets its answers
-wrong in ways that have nothing to do with how the deployed model gets them
-wrong, which is the only reason any of it is worth an interpreter's attention.
-The model's own
-posterior is not in this file and is not evidence -- it is the thing being
-corrected, and on the two visible map errors it is confident and wrong.
+Included evidence
+-----------------
+* Dynamic World, WorldCover, Hansen forest loss, GHSL built surface and ESRI
+  annual land cover provide complementary modelled products.
+* Growing-season Sentinel-2 medians provide NDVI, NDMI, NBR and six reflectance
+  bands for 2017--2025.
+* Copernicus DEM and JRC Global Surface Water provide terrain and water context.
 
-1. **Core point values.** Dynamic World 2018/2024 mode plus built/crop/tree
-   probability means; ESA WorldCover 2020 (v100) *and* 2021 (v200), because the
-   two disagree and the disagreement is itself informative; Hansen ``lossyear``
-   from the 2025 v1_13 vintage -- v1_11 stops at 23 and the label window ends in
-   2024; GHSL built surface per epoch; per-year clear-scene counts, so a flat
-   timeline can be told apart from an empty one.
-2. **Annual index timeline 2017-2025.** Growing-season medians of NDVI, NDMI and
-   NBR plus the six raw S2 SR band medians (B2, B3, B4, B8, B11, B12), so the
-   spectral profile in the app needs no further network call. The cloud recipe
-   is the inspector's: ``COPERNICUS/S2_SR_HARMONIZED`` joined to
-   ``S2_CLOUD_PROBABILITY``, probability < 40, SCL shadow/cloud/cirrus dropped.
-3. **ESRI 10 m Annual Land Cover 2017-2023.** Annual and 10 m with an explicit
-   Crops class, so it names a change *year* rather than bracketing one.
-4. **Terrain and water.** Copernicus DEM slope, a WorldCover bare-ground flag,
-   JRC Global Surface Water occurrence. These are the two §AL-T stable-class map
-   errors -- mountains read as built-up, wetlands read as cropland -- made
-   visible at the point where they are being labelled.
+These products are supporting evidence, not reference truth. Their vintages,
+resolution and coverage are shown in the interface, and the application's own
+model output remains separate to reduce anchoring.
 
-Two things this gets right that a naive version does not
---------------------------------------------------------
-**The growing season is latitude-aware.** ``c2c_ts_server.py``, which the S2
-recipe is taken from, hardcodes June-September because it is a Europe-only tool.
-These points are drawn globally: a southern-hemisphere point composited over
-June-September is its *dry* season, and the whole timeline is then misleading in
-a way that looks like data. The window flips by hemisphere, the tropics get the
-full year, and which was used is recorded in the payload rather than assumed.
+The compositing window is latitude-aware: June--September in the northern
+hemisphere, December--March in the southern hemisphere, and the full year near
+the equator. The selected window is stored with the evidence.
 
-**The extraction is batched -- but on two different axes, and the difference is
-the whole lesson here.**
-
-For the *point-value* datasets (Dynamic World, WorldCover, Hansen, GHSL, ESRI,
-terrain) the batching axis is **points**: one ``reduceRegions`` over a chunk of
-them per dataset. A hundred points times twenty datasets times a round trip each
-is an afternoon; chunked it is a minute.
-
-For the *Sentinel-2 timeline* that axis does not work at all, and the reason is
-structural rather than a matter of tuning: **Earth Engine evaluates in tiles.**
-A request is costed by the tiles it has to touch, so a batch of points that fall
-in the same tile is nearly free to add to, and a batch of points that do not is
-one request that must materialise every one of their tiles at once. These points
-are a **global equal-area draw** -- consecutive points are on different
-continents by construction -- so a request covering twenty of them makes the
-cloud-probability join materialise scenes across several continents, and Earth
-Engine answers **"User memory limit exceeded"**. At 100 points, and still at 20:
-lowering the chunk size does not fix a problem whose cost is the spread.
-
-So **widely-spread points are mapped over independently**: the timeline makes
-one request per **(point, year)**, with ``filterBounds`` on that single point
-keeping each year's collection to the scenes that actually touch it. Measured,
-at one point: a single year is **2.4 s**; nine years of one band each is 5.7 s;
-nine years of all ten bands **times out**. So the unit is the point-year.
-
-**Budget it as roughly 20 s per point, not 2.4.** The ~900 point-years of a
-100-point batch go through a thread pool, but a measured end-to-end run took
-**36 minutes**, not the ~2 the per-request timing predicts: Earth Engine
-rate-limits interactive `getInfo` calls, so sixteen workers buy far less than
-sixteen times the throughput. That is fine -- this is a build step run once per
-round, not something an interpreter waits on -- but do not size a labelling
-round on the optimistic arithmetic.
-
-The chunked, points-batched path survives only for the point-value datasets,
-which are plain per-pixel lookups with no collection to reduce and are therefore
-cheap to sample anywhere.
+Point-value datasets are sampled in chunks with ``reduceRegions``. Sentinel-2
+time series are requested per point-year because widely separated points can
+otherwise exceed Earth Engine tile-memory limits. Runtime therefore depends on
+the spatial distribution of a batch and current service limits; measure it on a
+small batch before planning a campaign.
 
 Usage
 -----
-    G=python   # whichever interpreter has the deps
-
-    # normally: called from build_label_batches.py with --evidence
-    $G src/build_label_batches.py --placeholder --evidence
-
-    # or added to batches that already exist
-    $G src/build_batch_evidence.py --batch app/batches/b001.json
-
-    # the parts that need no Earth Engine, for a check
-    $G src/build_batch_evidence.py --show-seasons
+    python src/build_label_batches.py --placeholder --evidence
+    python src/build_batch_evidence.py --batch app/batches/b001.json
+    python src/build_batch_evidence.py --show-seasons
 """
 from __future__ import annotations
 
@@ -131,10 +67,9 @@ ASSETS = {
     "hansen": "UMD/hansen/global_forest_change_2025_v1_13",
     "ghsl": "JRC/GHSL/P2023A/GHS_BUILT_S",
     "esri_lc": "projects/sat-io/open-datasets/landcover/ESRI_Global-LULC_10m_TS",
-    # EC JRC global forest cover 2020, the EU deforestation-regulation
-    # baseline. 10 m, and it EXCLUDES agricultural plantations -- the one
-    # distinction Hansen's tree-cover threshold cannot make, and the one that
-    # lands on this legend's Cropland / Nature line. V1 and V2 are deprecated.
+    # EC JRC global forest cover 2020. It excludes agricultural plantations;
+    # this complements products based on a tree-cover threshold. V1 and V2 are
+    # deprecated.
     "gfc2020": "JRC/GFC2020/V3",
     # GLO30 proper is deprecated in favour of this; same "DEM" band.
     "dem": "COPERNICUS/DEM/GLO30_2024_1",
@@ -157,11 +92,7 @@ WC_NAMES = {10: "tree cover", 20: "shrubland", 30: "grassland", 40: "cropland",
 ESRI_NAMES = {1: "water", 2: "trees", 4: "flooded vegetation", 5: "crops",
               7: "built area", 8: "bare ground", 9: "snow/ice", 10: "clouds",
               11: "rangeland"}
-#: 2017-2025. The collection ended at 2023 when this was written and now runs
-#: to 2025, which makes it the ONLY annual 10 m product that can answer for
-#: both ends of a 2018 -> 2024 question. That is the end-year rule paying off
-#: in the other direction: a vintage that moved forward and was not noticed is
-#: a dataset answering 2023 to a 2024 question for no reason.
+#: 2017-2025, spanning both endpoints and one year of later context.
 ESRI_YEARS = tuple(range(2017, 2026))
 
 #: The two dates the label is about.
@@ -179,9 +110,7 @@ def growing_season(lat: float) -> dict:
     * **|lat| <= 15** -- the full year. There is no single growing window worth
       picking in the humid tropics, and a four-month one throws away most of the
       few cloud-free scenes there are.
-    * **lat > 15** -- June to September, the northern growing season. This is the
-      window ``c2c_ts_server.py`` hardcodes, and it is correct for the half of
-      the world that tool was written for.
+    * **lat > 15** -- June to September, the northern growing season.
     * **lat < -15** -- December to March, which for the southern hemisphere means
       the window *starts in the previous calendar year*. Hence ``year_offset``:
       the composite labelled 2020 runs December 2019 to March 2020. Compositing
@@ -573,8 +502,7 @@ def _point_values_chunk(ee, points: list[dict], indices: list[int],
             for i, props in got.items():
                 code = _int(props.get("wc"))
                 # Absent, not "no": a point WorldCover cannot answer for is not
-                # a point that is known not to be bare, and §AL-T's whole finding
-                # is that bare ground is where the model is confidently wrong.
+                # a point that is known not to be bare.
                 if code is not None:
                     out[i]["bare_flag"] = "yes" if code == 60 else "no"
 

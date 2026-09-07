@@ -25,10 +25,7 @@
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>PlotCall · land-cover interpretation</title>
-<!-- Every host the labelling loop touches, opened before anything asks for a
-     tile. Points are 5 km cells drawn globally, so consecutive points share no
-     tiles at all and every one of these connections is re-made per point; 100-300
-     ms per host per point is a real fraction of the budget. -->
+<!-- Open connections to imagery services before the first tile request. -->
 <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
 <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
 <link rel="preconnect" href="https://tiles.maps.eox.at" crossorigin>
@@ -861,9 +858,8 @@ if (typeof maplibregl === 'undefined') {
                    line-height: 1.35; }
 
   /* ── evidence ───────────────────────────────────────────────────────────
-     Open by default and visually apart from the collapsed model hint. The two
-     are not the same kind of thing: these fail independently of the model
-     (§P), the posterior does not. */
+     Open by default and visually apart from the collapsed model hint. These
+     sources are contextual evidence and may fail differently from the model. */
   .ev-why { font-size: 13px; color: var(--muted); line-height: 1.45;
             margin: -2px 0 7px; }
   /* Four labelled blocks in the order an interpreter works in, and every value
@@ -941,8 +937,6 @@ if (typeof maplibregl === 'undefined') {
                      cursor: pointer; }
   .ev-plot .ev-dot.sel { stroke: var(--ink); stroke-width: 2; r: 6; }
   .ev-plot .ev-target { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 2; }
-  .ev-plot .ev-cut { stroke: var(--nature); stroke-width: 1; stroke-dasharray: 2 3; }
-  .ev-plot .ev-cut-lbl { font-size: 10.5px; fill: var(--nature); }
   .ev-plot .spec-line { fill: none; stroke-width: 1.5; opacity: .9; }
   .ev-plot .spec-line.dim { opacity: .25; }
   .ev-plot .spec-line.sel { stroke-width: 2.6; opacity: 1; }
@@ -1354,10 +1348,7 @@ try {
               <option value="osm">OpenStreetMap</option>
             </select>
           </div>
-          <!-- ONE span, not a bare text node plus a <b>. `.card label` is
-               display:flex, so each of those would be its own flex item with a
-               7px gap and its own wrapping -- the three-squashed-columns bug
-               §AL9 already fixed once on `.body`. -->
+          <!-- Keep the text in one span so the flex label wraps as one item. -->
           <label><input type="checkbox" id="ov-cell" checked>
             <span>yellow 10 m label square — <b>classify this area</b></span></label>
           <label><input type="checkbox" id="ov-footprint" checked>
@@ -1553,17 +1544,12 @@ try {
         </details>
 
         <!-- Evidence. OPEN by default, and deliberately not in the same visual
-             group as the collapsed model hint below: these datasets get their
-             answers wrong in ways that have nothing to do with how the model
-             being corrected gets them wrong (§P), and the posterior does not.
+             group as the collapsed model hint below: these datasets may make
+             different errors from the model being assessed.
 
-             ORDER IS MEASUREMENT FIRST, OPINIONS LAST, and it is not a matter of
-             taste. What is being labelled here is training data for a 10 m model
-             over AlphaEarth, so the reading that decides the call has to be the
-             one made at 10 m from the sensor: the spectral profile, then the
-             series, then the pictures. Dynamic World, WorldCover, ESRI and
-             Hansen are other people's models — useful precisely because they
-             fail differently (§P), and dangerous at the top of a panel, where
+             Record the independent interpretation before opening external
+             land-cover products. Dynamic World, WorldCover, ESRI and Hansen
+             can provide useful context, but can also anchor the reader when
              twenty-three rows of confident classifications are read as the
              answer and the interpreter spends their attention agreeing. They
              are still here, one click away, at the foot. -->
@@ -1668,22 +1654,8 @@ try {
 // is the transition label the model trains on. Wayback supplies the two dates:
 // the 2018-vs-2024 swipe is the instrument, not a decoration.
 //
-// THREE THINGS IN HERE ARE DESIGN, NOT TASTE, AND ARE ANSWERED IN README.md,
-// "Design decisions that are not taste":
-//
-//  1. BATCHES ARE SMALL AND SEQUENTIAL. AL4 measured the same 2,000
-//     acquisitions at -0.003 change-F1 delivered as one batch and +0.031 as
-//     twenty. A one-shot campaign throws the model-in-the-loop half away. So
-//     the app is built around a batch of ~100 that gets finished and synced,
-//     not an infinite queue.
-//  2. THE MODEL'S OPINION IS HIDDEN BY DEFAULT. The two map errors the user can
-//     see are ones where the model is *confident and wrong* (bare ground read as
-//     built-up, AL-T). Showing a posterior next to the buttons would launder
-//     that error into the label set.
-//  3. THREE SPATIAL UNITS HAVE DIFFERENT JOBS. The yellow 10 m Sentinel-2
-//     square is the unit being labelled by majority cover. The white 100 m
-//     square is a scale guide only, and the dashed 5 km sampling square from
-//     PATCH_SAMPLING.md provides selection and landscape context only.
+// The interface uses finite batches, hides model output until after a call, and
+// distinguishes the labelled 10 m cell from the map's scale and context guides.
 // ════════════════════════════════════════════════════════════════════════════
 
 const CFG = Object.assign({
@@ -1741,35 +1713,13 @@ if (CFG.title) document.title = CFG.title;
 }
 
 // ── the legend ──────────────────────────────────────────────────────────────
-// Replace this for your own campaign -- see "The legend is yours" in README.md.
+// Replace this for your own campaign; see the default interpretation protocol
+// and customization notes in the repository README.
 // Whatever goes here must be a legend the training frame can coarsen to: a
 // label the model cannot represent is a label that gets dropped.
-//: These follow the LUCAS typology as the campaign cribsheet states it, and
-//: `CRIBSHEET_URL` is linked from the legend so the full text is one click from
-//: the call. Three of them were under-specified against it and one contradicted
-//: it; what changed, and why each change is load-bearing:
-//:
-//:  * Nature gains **sand, ice and snow** and, more importantly, the carve-out
-//:    that sand and rock **at a mine or a development are Artificial**. That is
-//:    the §AL-T error in one sentence: bare ground is the largest map error and
-//:    the model is more confident when it is wrong, so the one rule that tells
-//:    an interpreter which side of it a bare pixel is on belongs on screen.
-//:  * Cropland gains the exclusion that carries the whole class: **permanent
-//:    pasture and grazing that is not ploughed in rotation is Nature.** Only
-//:    temporary grassland inside a 1-5 year rotation is Cropland. This is the
-//:    boundary the ledger says caps change-F1, and the app was silent on it.
-//:  * Cropland names WHICH plantations, because "plantations" alone is the
-//:    other half of the same question: B84 makes oil palm, rubber, coffee, tea,
-//:    cocoa and coconut Cropland, while a stand grown for timber is in no B
-//:    class and falls to Nature. A felling is therefore Nature -> Nature or
-//:    Cropland -> Cropland depending on the stand, and forest cleared *to* a
-//:    crop plantation is the Nature -> Cropland this campaign counts.
-//:  * Artificial loses **"urban green inside the built fabric"**, which the
-//:    cribsheet does not support -- LUCAS codes a park by its cover. What it
-//:    does say is the opposite-looking rule that is easy to misremember as the
-//:    same one: a car park or a road is Artificial *even where the cover is
-//:    grass*, because the class is what the feature IS. It gains greenhouses,
-//:    solar farms and dumps, which are in the typology and were nowhere here.
+// The included three-class legend follows the documented LUCAS-based example.
+// Change the keys, shortcuts, colours, hints and full definitions together when
+// adapting the application to another classification protocol.
 const CLASSES = [
   { key: 'Nature',     k: 'A', k2: 'Z', css: 'nature',
     hint: 'anything that is neither farmed nor built: natural forest and timber plantation, shrub, grass, permanent pasture, wetland, water, bare rock, sand, ice and snow' },
@@ -1783,7 +1733,7 @@ const CLASSES = [
 //: repository's own legend as the default so a dragged-in copy of this folder
 //: still has the definitions one click away.
 const CRIBSHEET_URL = CFG.cribsheetUrl
-  || 'https://github.com/Geethen/PlotCall#the-legend-is-yours';
+  || 'https://github.com/Geethen/PlotCall#default-interpretation-protocol';
 const CLASS_KEYS = CLASSES.map(c => c.key);
 
 const FLAGS = [
@@ -1797,12 +1747,8 @@ const FLAGS = [
     tip: 'The nearest captures are far from 2018 or 2024, so an apparent difference may reflect the date gap.' },
   { key: 'transient_change', label: 'change seen, endpoints match', k: 'T',
     tip: 'A temporary change occurred between 2018 and 2024, but the land-cover class is the same at both endpoints.' },
-  //: `where: 'call'` used to pin these two beside the Save button, on the
-  //: argument that they qualify the transition read-out and are read with it.
-  //: They are back with the other flags (2026-08-31, user): six flags in two
-  //: places is two lists to learn, and the split put half of them below the
-  //: fold. `flags-call` and its `:empty` rule stay -- the mechanism is fine, it
-  //: is the assignment that was wrong.
+  // Keep all flags in one visible list; `where` remains available for custom
+  // deployments that deliberately separate call and imagery qualifiers.
   { key: 'interesting',   label: 'flag for review',   k: 'R',
     tip: 'Mark an unusual or difficult sample for later discussion.' }
 ];
@@ -2221,11 +2167,7 @@ function showIntro(onDone) {
     + '<p>For each sample, classify the land cover in the <b>yellow 10 m label '
     + 'square</b> for <b>2018</b> and <b>2024</b>. The two classes form the '
     + 'transition label.</p>'
-    // The rule the ORIGINAL sampling used. It is not a preference: the targets
-    // this trains on were defined as majority cover of the 10 m cell, so an
-    // interpreter judging the centre point instead is generating labels for a
-    // different question -- and does it invisibly, on the Cropland / Nature
-    // boundary the ledger says already caps change-F1.
+    // The labelled unit is the complete 10 m cell, not the centre coordinate.
     + '<p style="margin-top:8px">Use <b>majority cover within the square</b>. '
     + 'Do not classify the centre coordinate or the wider landscape. The square '
     + 'is one <b>' + LABEL_CELL_M + ' m Sentinel-2 pixel</b> on the satellite '
@@ -2398,9 +2340,8 @@ function normalisePoints(raw, batchId) {
       // labelling loop has to work with Earth Engine never signed in, so the
       // evidence that is not imagery does not come from a live EE call.
       evidence: props.evidence || null,
-      // The Sentinel-2 pixel this point addresses, baked by
-      // build_label_batches.py. Absent on a file dropped on the window, and on
-      // every batch built before 2026-08-31 -- `pointCell` computes it there.
+      // The Sentinel-2 pixel this point addresses, normally baked by
+      // build_label_batches.py. `pointCell` computes it when absent.
       // This object is an ALLOW-LIST: a key not named here is dropped without
       // a word.
       cell: props.cell || null,
@@ -2655,10 +2596,7 @@ function buildChoices() {
   document.querySelectorAll('.choice').forEach(b => {
     b.addEventListener('click', () => pick(b.dataset.year, b.dataset.class));
   });
-  // Built from CLASSES, not written out again: a legend that can drift from the
-  // buttons is worse than no legend. The boundary note is the one the ledger
-  // says caps change-F1 -- several readers disagreeing about it silently is the
-  // failure this block exists to prevent.
+  // Build from CLASSES so buttons and definitions cannot drift apart.
   const crib = $('legend-crib');
   if (crib) crib.href = CRIBSHEET_URL;
   $('legend-body').innerHTML = CLASSES.map(c =>
@@ -2676,7 +2614,7 @@ function buildChoices() {
     + 'Nature — unless it is being worked.</b> Sand and rock belonging to a mine, '
     + 'a quarry or a development site are <b>Artificial</b>. This is the single '
     + 'biggest mistake the current map makes, and one it makes confidently, so '
-    + 'this interpretation is worth the extra look.</div></div>'
+    + 'this case may require context beyond colour alone.</div></div>'
     + '<div class="rule"><span class="ic">▦</span><div>A feature is Artificial for '
     + '<b>what it is, not what covers it</b>: a grassed car park, a farmyard, a '
     + 'cemetery and an unsealed road are all Artificial, and a road, railway or '
@@ -2697,7 +2635,7 @@ function buildChoices() {
     // forest grown for timber is in none of the B classes and falls to Nature
     // with everything else that is neither farmed nor built. So a felling is
     // Nature -> Nature or Cropland -> Cropland depending on the stand, and the
-    // conversion BETWEEN the two is the one the campaign is counting.
+    // conversion between the two produces a class transition.
     + '<div class="rule hard"><span class="ic">🪓</span><div><b>A felling is '
     + 'whichever class was growing.</b> Natural forest and timber plantation are '
     + '<b>Nature</b>; a crop plantation — oil palm, rubber, coffee, tea, cocoa, '
@@ -2706,9 +2644,8 @@ function buildChoices() {
     + 'Cropland: the three-class transition cannot carry a clearance on its own, '
     + 'so classify both dates as you see them and tick <b>change seen, endpoints '
     + 'match</b>. Natural forest cleared <i>to</i> a crop plantation is '
-    + '<b>Nature → Cropland</b>, and that one is the habitat loss this campaign '
-    + 'exists to count — look at what replaced the trees before you classify the '
-    + 'second date.</div></div>'
+    + '<b>Nature → Cropland</b>. Look at what replaced the trees before you '
+    + 'classify the second date.</div></div>'
     + '<div class="rule"><span class="ic">📖</span><div>These are the <b>LUCAS</b> '
     + 'classes as the campaign defines them. <a href="' + esc(CRIBSHEET_URL)
     + '" target="_blank" rel="noopener">Full definitions, with the worked '
@@ -2827,8 +2764,7 @@ function setYear(v) { cur.year = (cur.year === v) ? null : v; renderForm(); }
 
 /** Is the form in a state that can be written to the sheet?
  *
- *  CONFIDENCE IS REQUIRED on a real call. It was optional until 2026-08-31 and
- *  therefore mostly absent, which cost more than it looks: an unresolved
+ *  CONFIDENCE IS REQUIRED on a real call. An unresolved
  *  disagreement between two experts is a different object depending on whether
  *  both were sure, and without the number there is no way to tell "the legend is
  *  ambiguous here" from "the imagery is". It costs one keystroke -- 1/2/3 have
@@ -3201,11 +3137,9 @@ function goBack() {
 }
 
 // ── calibration ─────────────────────────────────────────────────────────────
-// A calibration batch carries known answers, and everyone does one before their
-// first real batch. This is the campaign's answer to the standing verdict that
-// Cropland/Nature label noise sets the change-F1 ceiling: without it, three
-// people can label to three different standards for a month and the only sign is
-// an agreement number at the end, when it is too late to act on.
+// A calibration batch carries agreed reference answers. A teaching stage aligns
+// readers with the protocol; a blind qualification stage measures remaining
+// disagreement before a production batch is issued.
 //
 // The reference is never shown before the call. `immediate` feedback teaches,
 // `end` feedback assesses; neither reveals the answer while it could anchor one.
@@ -3322,9 +3256,8 @@ function announceDone() {
     return;
   }
   // It said "sync it, then take the next batch" and then offered one button,
-  // *back to the batch*. Both named actions meant closing the dialog and going
-  // to find controls in the card stack -- at the single moment in the loop
-  // where AL4's whole finding depends on the next batch actually being taken.
+  // *back to the batch*. Both actions used to require closing the dialog and
+  // finding controls in the card stack.
   const held = Outbox.size();
   const next = nextBatchEntry();
   setLoading('Batch complete — ' + n + ' of ' + myWorkload() + ' labelled',
@@ -3377,9 +3310,8 @@ function nextBatchEntry() {
 }
 
 // ── the view is addressable ─────────────────────────────────────────────────
-// A two-expert campaign settles disagreements by one person looking at what
-// the other looked at, and until now the only thing this app could hand over
-// was a batch. `?point=p0042&scheme=NIR/SWIR1/RED&w=640` opens the point, on
+// A two-expert campaign can investigate disagreements by reproducing the same
+// view. `?point=example&scheme=NIR/SWIR1/RED&w=640` opens the point, on
 // the same imagery, under the same stretch — which is the difference between
 // "we disagree about that point" and "we disagree about the legend".
 //
@@ -3461,8 +3393,6 @@ function goTo(i) {
 // Two groups of context, and the distinction is the whole design:
 //
 //   "About this location"   — WorldCover class, slope, biome. Visible, always.
-//                             §AL-T's coverage gap is *why* these points are in
-//                             the batch and the interpreter should see it.
 //   "Why it was selected"   — rank, acquisition score, channel. Hidden until the
 //                             point is saved. A point labelled "rank 1,
 //                             uncertainty" is a point the interpreter has been
@@ -3714,9 +3644,8 @@ function renderQueues() {
 
 /** How many readings THIS expert owes on this batch.
  *
- *  Not `S.points.length`. b001 splits 100 points into 47 for e1, 48 for e2 and
- *  5 read by both -- so each expert owes 52 or 53 and a finished batch used to
- *  read "52 / 100", which is not a slow labeller, it is a wrong denominator.
+ *  Not `S.points.length`: assigned readers may each receive only a subset of a
+ *  batch, including a deliberately shared subset for agreement estimates.
  *  Falls back to the whole batch for a batch cut without assignments. */
 function myWorkload() {
   let mine = 0;
@@ -3790,9 +3719,8 @@ console.info('[label-app] v' + APP_VERSION + ', built ' + document.lastModified)
 //: series starts at 2017 -- which is also where the evidence timeline starts.
 const EOX_YEARS = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
-//: 2017 IS THE THIN ONE and is labelled so in the picker. Measured 2026-08-31
-//: over the first twelve points of b001: EOX serve a 116-byte blank tile for
-//: 2017 at ten of them, against 4-28 KB for 2018 and 2024 at the same tile. It
+//: 2017 often has less coverage and is labelled as such in the picker. EOX may
+//: return a blank tile for 2017 where later years have imagery. It
 //: was their first year and the mosaic is partial.
 //:
 //: It is OFFERED anyway, because where it does exist it is the only 10 m look
@@ -3942,10 +3870,9 @@ function buildMap() {
     map.addLayer({ id: 'scalebox', type: 'line', source: 'scalebox',
       paint: { 'line-color': '#ffffff', 'line-width': 1.4, 'line-opacity': 0.9 } });
 
-    // THE LABELLING CELL. The call is majority cover of this square, and until
-    // 2026-08-31 nothing on the map drew it: the marker is a 2.6 px dot with a
-    // 13 px halo in SCREEN pixels, so it is the same size at every zoom and
-    // names no ground area at all. An interpreter cannot apply a majority-cover
+    // THE LABELLING CELL. The call is majority cover of this square. A screen-
+    // sized locator dot names a coordinate but no fixed ground area, so it
+    // cannot support a majority-cover
     // rule to a footprint they cannot see, and the two who tried would each
     // guess a different one -- which arrives as a disagreement about the legend.
     // Drawn above the scale square and under the marker.
@@ -4017,7 +3944,7 @@ const LABEL_CELL_M = 10;
 
 // A square of `km` on a side about (lon, lat). The cos(lat) term is what keeps
 // this the *same ground area* everywhere — a fixed degree box shrinks toward
-// the poles, and the sizing in PATCH_SAMPLING.md is denominated in km².
+// the poles.
 function squareAround(lon, lat, km) {
   const dLat = km / 2 / 110.574;
   const dLon = km / 2 / (111.320 * Math.cos(lat * Math.PI / 180));
@@ -4045,9 +3972,9 @@ const WGS_A = 6378137.0, WGS_F = 1 / 298.257223563;
 const WGS_E2 = WGS_F * (2 - WGS_F), WGS_EP2 = WGS_E2 / (1 - WGS_E2);
 const UTM_K0 = 0.9996, DEG = Math.PI / 180;
 
-/** The EPSG code of the UTM zone MGRS puts this point in — including the 32V
- *  and Svalbard exceptions, which are not academic here: the study area is
- *  Norway, and getting the zone wrong snaps to a grid Sentinel-2 does not use. */
+/** The EPSG code of the UTM zone MGRS puts this point in, including the 32V
+ *  and Svalbard exceptions. A wrong zone snaps the cell to a grid Sentinel-2
+ *  does not use. */
 function utmEpsg(lon, lat) {
   let z = Math.floor((lon + 180) / 6) + 1;
   if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) z = 32;
@@ -4329,9 +4256,8 @@ function googleEarthUrl(lat, lon) {
 // question this app's filmstrip and chart approximate: nine annual composites
 // versus every scene, with a movable chip and a live index.
 //
-// Linked rather than rebuilt. It is somebody else's Earth Engine quota, it needs
-// no sign-in from us, and §AL9 is explicit that the heavy per-scene diagnostics
-// belong outside the labelling loop.
+// Linked rather than rebuilt. It uses an external Earth Engine quota and keeps
+// heavier per-scene diagnostics outside the labelling loop.
 //
 // THE LINK CARRIES THE INTERPRETER'S CURRENT SETTINGS, so arriving there is a
 // continuation rather than a fresh start. Parameter names and the legal values
@@ -4419,8 +4345,7 @@ function initLayerControls() {
 // looks at the same ground. Wayback is the only free global archive of
 // sub-metre imagery with dates attached.
 //
-// Adapted from the DIST-ALERT inspector (Geethen_forests/inspector), which in
-// turn follows GeoLibre's maplibre-esri-wayback / vannizhang's wayback-core:
+// Follows the ArcGIS Wayback configuration and item metadata APIs:
 //   * config:  waybackconfig.json -> { <releaseNum>: { itemURL, itemTitle } }
 //   * itemURL is already an XYZ {level}/{row}/{col} WMTS template.
 //
@@ -5449,7 +5374,7 @@ function explainSync() {
 //                 restores my work instead of showing 0 / 100.
 //   `labelled` -> WHICH EXPERT holds each point, and nothing about WHAT they
 //                 said. A second reader must not see the first reading, or the
-//                 agreement number this campaign depends on measures nothing.
+//                 resulting agreement estimate would be biased by anchoring.
 //
 // Neither is allowed to block or to break the app: a sheet that is unreachable
 // leaves the interpreter exactly where they were.
@@ -5605,18 +5530,10 @@ function toCSV(records) {
 }
 
 // ── import: an export dropped back in ───────────────────────────────────────
-// An export is a LABELS file -- `exportBatch` writes the labelled rows and only
-// those. Until 2026-08-31 the drop handler fed every file to `parseBatch` and
-// then `adoptBatch`, so dropping your own export back in replaced the batch's
-// 100 points with the 52 you had finished: the count read "52 / 52", the strip
-// lost every outstanding point, and there was no way back to the work except
-// re-opening the batch from the manifest. Exactly backwards for a file whose
-// entire purpose is "carry on where I stopped" -- and it is the file an
-// interpreter reaches for precisely when sync has failed them, so the state it
-// destroyed was the state with no copy on the server.
-//
-// A labels file is identifiable without guessing: it carries answer columns
-// that no batch file has.
+// Exports contain completed label rows, not the full batch definition. Import
+// them as saved progress and merge by point ID; do not replace the active batch
+// or discard its unfinished points. Answer columns distinguish exports from
+// batch files.
 const LABEL_MARKER_COLS = ['class_2018', 'class_2024', 'transition'];
 
 function looksLikeLabels(rows) {
@@ -5824,7 +5741,7 @@ const EE = { ready: false, loading: false, timer: null, mode: null };
 // ════════════════════════════════════════════════════════════════════════════
 
 //: Not an OAuth client id and never sent anywhere -- see note 3 above.
-const EE_BROKER_CLIENT = 'recover-labelling-service-account';
+const EE_BROKER_CLIENT = 'plotcall-service-account';
 
 //: Apps Script's /exec answers an HTML 404 every so often on an endpoint that
 //: is otherwise healthy -- measured at 1 request in 4 against this deployment,
@@ -6329,10 +6246,8 @@ const EE_PRESETS = {
     name: 'terrain & water',
     ask: 'Is this bare ground being read as built-up, or a wetland as a field?',
     layers: [
-      // §AL-T: the "mountains" map error is a BARE GROUND error, not a slope
-      // error — the misread rate falls with slope and rises 3.1x on WorldCover
-      // bare. Both layers are here because both halves of that sentence are
-      // worth seeing.
+      // Elevation, slope and external land-cover context can help distinguish
+      // exposed terrain from spectrally similar land-cover types.
       { key: 'bare', label: 'WorldCover bare / sparse', end: 2021, res: '10 m',
         cover: 'global, 2021',
         build: p => {
@@ -6875,9 +6790,8 @@ function eeOnPointChange(p) {
 //     line for the same reason. Nothing here is written anywhere.
 //
 //   * ONE round trip per click. Both reduceRegions are combined server-side
-//     into a single dictionary and evaluated once, because the measured cost of
-//     Earth Engine here is the request and not the computation (§AL9), and
-//     because two evaluates would land out of order.
+//     into a single dictionary and evaluated once to reduce request overhead
+//     and prevent separate asynchronous responses arriving out of order.
 //
 //   * A masked pixel is an ANSWER, not a failure. `dwbuilt`, `obtemporal`,
 //     `hansen`, `dwchg` and the rest are masked differences: no value at a
@@ -7241,13 +7155,9 @@ function initEE() {
 //
 // WHY THIS SITS APART FROM THE MODEL HINT
 // ---------------------------------------
-// Section P of the ledger: a single-date auxiliary path is bought on ERROR
-// INDEPENDENCE, not on accuracy. Dynamic World, WorldCover, Hansen and the S2
-// timeline get their answers wrong in ways that have nothing to do with how the
-// AlphaEarth two-tower gets them wrong — which is exactly why they are evidence.
-// The posterior is not: it is the thing being corrected, and on the two visible
-// map errors it is confident and wrong. So the evidence is open by default and
-// the model hint stays behind a closed disclosure.
+// Auxiliary products are useful when their errors differ from those of the map
+// under review. They are contextual evidence, not ground truth. The prediction
+// being assessed stays behind a closed disclosure to reduce anchoring.
 // ════════════════════════════════════════════════════════════════════════════
 
 //: The batch-level half of the evidence contract. The builder writes the schema
@@ -7455,23 +7365,10 @@ function evLineHTML(group, vals) {
 }
 
 // ── the annual index timeline ───────────────────────────────────────────────
-// Ported from the DIST-ALERT inspector's NBR chart, with two deliberate
-// differences.
-//
-// 1. THE DEFAULT SERIES IS NDVI, NOT NBR. NBR is a forest-loss index; this
-//    legend is Nature / Cropland / Artificial and the ledger's vegetation cut is
-//    on NDVI at 0.31. NBR is still selectable — it is the right instrument for
-//    the one transition that IS a clearance — but it is not the default.
-// 2. NO SEGMENTER OVERLAYS. The inspector draws LandTrendr, VeRDET, CCDC, COLD
-//    and S-CCD fits beside the buttons. Five model opinions next to a label
-//    control is precisely the anchoring §AL7 built the collapsed model hint to
-//    prevent, and none of them is even fitted to this target.
-//
-// 3. THE SERIES AND THE CHIP SCHEME ARE ONE SETTING WHERE THEY CAN BE. NDVI,
-//    NDMI and NBR are defined once, in CHIP_INDEX, and that definition draws
-//    the chip, colours the dot and plots the line. A chart whose "NDVI" and a
-//    filmstrip whose "NDVI" came from two band lists is a disagreement waiting
-//    to be read as change.
+// NDVI is the default general vegetation index; NDMI and NBR are selectable.
+// Segmentation-model overlays are omitted so interpreters first assess imagery
+// and measured series. Each index is defined once in CHIP_INDEX and that same
+// definition drives the chip, dot colour and plotted line.
 function evSeriesList() {
   return Object.keys(CHIP_INDEX).map(k => ({
     key: CHIP_INDEX[k].series, label: k, tip: CHIP_INDEX[k].tip
@@ -7491,11 +7388,8 @@ function evYears() {
 // EVERY clear-sky observation at the point, all seasons, not one composite a
 // year.
 //
-// It is here because it is the best instrument this app can carry for the
-// boundary the ledger says caps the model. A cropped field and rough grazing
-// have the same annual-composite NDVI and completely different SHAPES inside
-// the year: the field is bare, then green, then cut; the grazing is flat. One
-// composite a year cannot see that by construction.
+// A dense series can separate trajectories with similar annual medians; one
+// annual composite cannot show within-year timing by construction.
 //
 // BAKED, and the note that said it could not be is now wrong. It said "nine
 // years of Sentinel-2 at a point is a few hundred rows, and a hundred points of
@@ -7507,8 +7401,8 @@ function evYears() {
 //
 // The annual chart drops to a faint line when this is on: the dense cloud is
 // the reading and the composite is the context, not the other way round.
-//: Keyed by `chipScope(p)`, not by point id -- same collision, same reason as
-//: the chip cache: `p0000` exists in every batch. See chipScope().
+//: Keyed by `chipScope(p)`, not point ID, because independently generated
+//: batches may reuse identifiers. See chipScope().
 const denseCache = new Map();     // scope -> {t: [ms], ndvi/ndmi/nbr: [...]}
 let denseOn = true;
 let denseState = 'off';           // off | loading | ready | error | offline
@@ -7580,9 +7474,8 @@ function denseFetchLive(p) {
   // THE PIXEL, not a neighbourhood and not a square around the point.
   // `reduceRegion` over the point at scale 10 is the value of the Sentinel-2
   // pixel containing it, in the granule's own grid -- the same pixel the app
-  // outlines in yellow. See build_batch_dense.py: this read a 30 m radius
-  // circle at 20 m until 2026-08-31 (~28x the area of the call), then a 10 m
-  // square centred on the point, which straddles four pixels and is none.
+  // outlines in yellow. A neighbourhood or point-centred square would sample a
+  // different spatial support, especially near land-cover boundaries.
   const start = ee.Date.fromYMD(years[0], 1, 1);
   const end = ee.Date.fromYMD(years[years.length - 1] + 1, 1, 1);
   const col = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -7735,14 +7628,6 @@ function renderEvidenceChart(p) {
     g += '<line class="ev-target" x1="' + x(yr).toFixed(1) + '" y1="' + mt
        + '" x2="' + x(yr).toFixed(1) + '" y2="' + (mt + ih) + '"/>';
   }
-  // The vegetation cut, where the plotted series is the one it is defined on.
-  if (evSeries === 'ndvi' && 0.31 > lo && 0.31 < hi) {
-    g += '<line class="ev-cut" x1="' + ml + '" y1="' + yp(0.31).toFixed(1)
-       + '" x2="' + (W - mr) + '" y2="' + yp(0.31).toFixed(1) + '"/>'
-       + '<text class="ev-cut-lbl" x="' + (W - mr - 2) + '" y="'
-       + (yp(0.31) - 3).toFixed(1) + '" text-anchor="end">green cover \u2248 0.31</text>';
-  }
-
   let d = '', on = false;
   const pos = {};
   years.forEach((yr, i) => {
@@ -7779,20 +7664,8 @@ function renderEvidenceChart(p) {
   // THE DOT IS PAINTED ON THE RAMP OF THE INDEX IT IS PLOTTED ON, so colour and
   // height are the same number said twice and higher NDVI is ALWAYS greener.
   //
-  // Settled three times, and the third one has a measurement behind it. AL10
-  // chose the index ramp; AL11.5 switched to the chip colour so a dot could be
-  // matched to its filmstrip cell; AL11.8 switched back, because a false-colour
-  // mix is not the index and at some points it runs the other way. Measured over
-  // all 99 points of b001 with a stretch, under SWIR1/NIR/GREEN: NDVI and
-  // perceived greenness correlate positively at 84 and **negatively at 15**
-  // (p0005 r=-0.85, p0056 -0.84, p0010 -0.81, p0013 -0.71) -- because red is
-  // SWIR1 there, so dry-but-vegetated ground renders brown at a high NDVI. Four
-  // of the first fourteen points do it, so it reads as a broken ramp rather than
-  // as honest false colour.
-  //
-  // The cross-link that motivated AL11.5 is genuinely lost. It is worth less
-  // than a colour scale the interpreter can trust without checking which scheme
-  // is loaded.
+  // Paint dots from the plotted index rather than a three-band chip colour. The
+  // latter is not an index and may vary in the opposite visual direction.
   const dotCombo = indexComboForSeries(evSeries);
   for (const yr of Object.keys(pos)) {
     const q = pos[yr];
@@ -7892,12 +7765,9 @@ function selectEvYear(year, opts) {
 }
 
 // ── the spectral profile ────────────────────────────────────────────────────
-// Median reflectance against band wavelength, one polyline per year. Ported
-// unchanged in shape from the inspector because it reads the same payload —
-// and because it is the best available instrument for the Cropland / Nature
-// boundary, which the ledger's standing verdict says caps change-F1. A cropped
-// field and rough grazing look the same in a 10 m RGB chip and separate cleanly
-// in SWIR.
+// Median reflectance against band wavelength, one polyline per year. Spectral
+// profiles can distinguish covers that look similar in a small RGB image,
+// particularly when visible and short-wave infrared bands differ.
 const SPEC_BANDS = [
   { key: 'B2',  wl: 492,  name: 'Blue' },
   { key: 'B3',  wl: 560,  name: 'Green' },
@@ -8075,7 +7945,7 @@ const CHIP_RGB = {
 //: recipe to drift.
 const CHIP_INDEX = {
   'NDVI': { bands: ['B8', 'B4'],  min: 0.0,  max: 0.9, series: 'ndvi',
-    tip: 'Greenness. The dashed line at 0.31 is roughly where bare or built ground ends and green cover begins — fitted on this project’s own plots, and only a rough guide (it separates them about two times in three).' },
+    tip: 'Normalised difference vegetation index: higher values usually indicate more photosynthetically active vegetation.' },
   'NDMI': { bands: ['B8', 'B11'], min: -0.2, max: 0.6, series: 'ndmi',
     tip: 'Moisture. Irrigation and wet-season cropping show here first.' },
   'NBR':  { bands: ['B8', 'B12'], min: 0.0,  max: 0.8, series: 'nbr',
@@ -8085,10 +7955,8 @@ const INDEX_RAMP = ['#7c4a13', '#b8860b', '#e6d200', '#9acd32', '#3f9e3f', '#0b6
 
 function chipIsIndex(combo) { return combo in CHIP_INDEX; }
 
-/** The CHIP_INDEX key whose `series` is the one on the chart right now.
- *  This is what paints the chart dots (AL11.8), and the lookup from a series
- *  name back to its scheme generally -- re-deriving it inline is how the two
- *  band lists for one word called NDVI get created. */
+/** The CHIP_INDEX key whose `series` is on the chart. Keeping this lookup in one
+ *  place prevents the chip, dot colour and chart from using different bands. */
 function indexComboForSeries(series) {
   return Object.keys(CHIP_INDEX)
     .find(k => CHIP_INDEX[k].series === (series || evSeries)) || null;
@@ -8116,12 +7984,8 @@ const STRETCH_MIN_SPAN = 120;
 
 /** This point's measured display bounds, or null for the global ones.
  *
- *  Written by `build_batch_chips.py` from the point's own nine years, because
- *  the fixed bounds in CHIP_RGB are one ramp for a global draw and they
- *  saturate: on the first bake of b001, 55 of 900 year-cells were more than
- *  half-saturated, 38 more than half-floored, and the median cell's 98th
- *  percentile was 252 of 255. A desert baked as flat cream and a lake as flat
- *  black, and neither is a picture of anything.
+ *  Written by `build_batch_chips.py` from the point's annual series because
+ *  fixed global bounds can saturate bright or dark scenes.
  *
  *  Width has to match because the ramp is a measurement of a 640 m box. */
 function chipStretch(p) {
@@ -8159,33 +8023,28 @@ function comboBounds(p, combo) {
   return { bands: spec.bands, min: lo, max: hi, tip: spec.tip };
 }
 
-//: Below this the widest of the three bands gets fewer than ~50 of 255 levels
-//: and a cell reads as a solid block. Measured on b001: 7 points of 99, of
-//: which 3 are under 6% and are the ones people report.
+//: Below this ratio the widest band uses fewer than ~50 of 255 display levels,
+//: so a cell may appear nearly uniform.
 const CHIP_FLAT_USE = 0.20;
 
 /** Why this point's strip is flat, when it is flat ON PURPOSE — or null.
  *
- *  §AL10 ships ONE affine transform shared by the three channels: `lo` is the
+ *  One affine transform is shared by the three channels: `lo` is the
  *  darkest of their floors and `hi` the brightest of their ceilings. The cost
  *  of that choice is exactly this. At a point where the three bands sit at very
  *  different levels — bright bare ground runs SWIR1 ~6600, NIR ~4900, GREEN
  *  ~2800 — the shared ramp is ~4000 DN wide while each band's own p2–p98 spread
  *  is ~140, so the widest band uses 3.5% of the ramp and nine years bake as
- *  nine identical orange squares. On b001 that is p0022, p0040 and p0065.
+ *  nine nearly identical squares.
  *
  *  That is the correct picture of a uniform desert, and on screen it is
- *  indistinguishable from the bake having failed — which is the one confusion
- *  §AL9's `chipBakeMiss` and §AL10's re-bake were between them meant to end.
- *  The numbers are already in the batch, so say it.
+ *  indistinguishable from a failed bake. The numbers are already in the batch,
+ *  so the interface explains the condition.
  *
  *  DO NOT "fix" this by narrowing the ramp. Per-band bounds are a decorrelation
  *  stretch: they move hue, and hue here is a convention the legend teaches. A
- *  narrow ramp of any kind turns the few hundred DN of ordinary atmospheric
- *  drift between two years into a full-scale colour swing — p0022 cycled
- *  yellow / brown / white / black / teal / orange / blue across nine unchanging
- *  years — and a filmstrip that manufactures change is worse than one that is
- *  flat. Both are tested-negative in §AL10; this note is the alternative. */
+ *  narrow ramp can turn ordinary atmospheric variation into a full-scale
+ *  colour swing, creating apparent change. */
 function chipFlatNote(p) {
   if (chipIsIndex(chipVis.combo)) return null;
   const st = chipStretch(p);
@@ -8320,13 +8179,9 @@ const chipCache = new Map();      // 'id|year|combo|w' -> resolved thumb URL
 /** Everything that makes two chips different pictures, INCLUDING which batch
  *  the point came from.
  *
- *  `build_label_batches.py` numbers points from `range(len(frame))`, so round
- *  two starts at `p0000` again and collides with b001 inside one session. The
- *  point id alone was the key until 2026-08-31: switching batches without a
- *  reload served the previous batch's imagery under the new batch's point, and
- *  it would have looked like nothing at all -- a real S2 chip of a real place,
- *  just not this one. Coordinates are in the key too, so the same id at moved
- *  coordinates cannot alias either. */
+ *  Separately generated batches may reuse point IDs. Batch identity and
+ *  coordinates prevent imagery from one point being reused for another after
+ *  an in-session batch switch. */
 function chipScope(p) {
   const b = S.batch || {};
   return (b.campaign || '') + '|' + (b.batch_id || '') + '|' + p.id
@@ -8370,9 +8225,8 @@ function growingSeason(lat) {
 //
 // `src/build_batch_chips.py` bakes each point's nine years into ONE sprite next
 // to the batch, and this reads it: opening a point then costs a single static
-// file and no Earth Engine at all. It is `warm_ts_cache.py` from the DIST-ALERT
-// inspector, for a host with no server to warm -- that app computes nothing
-// before a click either, and feels instant because somebody already paid.
+// file and no Earth Engine at all. Baking pays the remote-processing cost once
+// rather than on every reader's first visit to the point.
 //
 // Everything degrades. No bake, a scheme that was not baked, a different chip
 // width, a version the app does not know, a dropped-in batch file with no URL,
@@ -8484,9 +8338,8 @@ function paintSprite(strip, url, n) {
  *  ones on four points of five, and swapping s2cloudless for MSK_CLDPRB or
  *  Cloud Score+ moved nothing outside the noise.
  *
- *  The cap applies to the PICTURE only. The baked chart is an uncapped median
- *  and stays one; the season is identical either way, which is the property
- *  §AL8 says must not drift. `0` disables the cap — that is what the lightbox
+ *  The cap applies to the picture only. The baked chart remains an uncapped
+ *  median, and both paths use the same season. `0` disables the cap — the lightbox
  *  asks for, because an interpreter who has deliberately enlarged a year is
  *  waiting on purpose. */
 const CHIP_SCENE_CAP = 12;
@@ -8676,8 +8529,8 @@ function liveChips(p, years, gen, why) {
   // time: the strip reverts to flat tints, and "the chips are one colour" is
   // then a question nobody on this side of the screen can answer.
   // An index scheme reaching this point is not a bake that failed -- index
-  // schemes are NEVER baked, on purpose (§AL10: one normalised difference
-  // through a ramp does not clip and is cheap live). Reported as a bake miss it
+  // schemes are never baked: a normalised difference through a ramp is cheap
+  // live. Reported as a bake miss it
   // reads as a fault, and the interpreter's next move is to go looking for the
   // broken thing rather than to wait the few seconds it actually costs.
   if (miss && !why && chipIsIndex(chipVis.combo))
@@ -8979,10 +8832,8 @@ function initLightbox() {
 // ════════════════════════════════════════════════════════════════════════════
 // Prefetch
 //
-// Points are 5 km cells drawn globally, so consecutive points are on different
-// continents and there is ZERO incidental tile reuse: every Enter is a cold
-// fetch of a basemap, two Wayback releases, their metadata and nine chips. The
-// only way that budget is met is by doing it before the interpreter asks.
+// The next point may not share imagery tiles with the current point. Prefetch
+// the basemap, Wayback metadata and filmstrip while the browser is idle.
 //
 // Everything here is idle-time, cancellable by being ignored, and must never
 // take priority over the point on screen.
@@ -9044,12 +8895,9 @@ function prefetchAhead() {
  *  second inside the first is free, and by the time Enter is pressed the nine
  *  images are in the browser's cache and the strip paints at once.
  *
- *  It is also the whole of what the DIST-ALERT inspector does, at a smaller
- *  radius. That app computes NOTHING before a click either -- its server's
- *  docstring says so -- and feels instant because `scripts/warm_ts_cache.py`
- *  walked the pixel list through it before the review session. A cold chip
- *  costs what it costs; the only move anyone has is to make the interpreter's
- *  look at a point not be the first one.
+ *  Remote computation remains the limiting cost. Prefetching starts it while
+ *  the reader examines the current point so the next filmstrip is likely to be
+ *  in the browser cache when needed.
  *
  *  It used to mint the URL for two years and stop there -- which bought the
  *  ~2-6 s `getThumbURL` round trip and none of the 5-40 s that the GET of the
