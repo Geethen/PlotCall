@@ -1,8 +1,35 @@
-# PlotCall
+<p align="center">
+  <img src="docs/icon.svg" width="96" height="96" alt="">
+</p>
+
+<h1 align="center">PlotCall</h1>
+
+<p align="center"><strong>One point. One pixel. One call.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/Geethen/PlotCall/actions/workflows/tests.yml"><img src="https://github.com/Geethen/PlotCall/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue.svg" alt="MIT licence"></a>
+  <img src="https://img.shields.io/badge/build%20step-none-brightgreen.svg" alt="no build step">
+  <img src="https://img.shields.io/badge/interpreter%20sign--in-not%20required-brightgreen.svg" alt="no interpreter sign-in">
+</p>
+
+---
 
 PlotCall is a browser application for independent visual interpretation of land cover at a fixed Sentinel-2 cell. The included protocol asks a reader to classify the same 10 m cell in 2018 and 2024, producing an endpoint-to-endpoint transition label.
 
 The repository contains the static application, batch builders, optional evidence builders, a Google Sheets backend, and tools for summarising completed rounds.
+
+## Contents
+
+[Why use it](#why-use-it) ·
+[What it looks like](#what-it-looks-like) ·
+[How it fits together](#how-it-fits-together) ·
+[Try it locally](#try-it-locally) ·
+[Build batches](#build-batches) ·
+[Baked evidence](#optional-baked-evidence) ·
+[Configure a deployment](#configure-a-deployment) ·
+[Round reports](#output-and-round-reports) ·
+[Interpretation limits](#interpretation-limits)
 
 ## Why use it
 
@@ -16,6 +43,8 @@ PlotCall makes several parts of a visual-interpretation protocol explicit:
 - **Recoverable work:** labels are saved locally, queued when submission fails, and can be exported and restored.
 
 These features improve consistency and auditability. They do not make visual labels error-free or turn agreement into accuracy.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## What it looks like
 
@@ -37,6 +66,16 @@ The interpretation view. The **yellow square** is the Sentinel-2 cell being clas
 The brief opens the session and states the unit, the legend and the keys. Calibration batches with agreed reference interpretations run before real labelling.
 
 Screenshots show a labelling round with baked evidence. The bundled demo batch is smaller and has no baked sidecars, so its filmstrip and charts fall back to live Earth Engine.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
+
+## How it fits together
+
+![PlotCall architecture: batches and their evidence are built once with Python, the app directory is served as static files, and interpretation happens in the browser](docs/architecture.svg)
+
+Three stages, and only the first needs Python or an Earth Engine account. Batches and evidence are built once per round; `app/` is then a folder of static files that any web root can serve; the browser keeps drafts and an outbox, so a dropped connection loses nothing.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Try it locally
 
@@ -61,6 +100,10 @@ The bundled demo is intentionally unconfigured:
 
 Do not evaluate a protocol or model from the demo labels.
 
+To go further: [cut batches from your own points](#build-batches), [bake the evidence](#optional-baked-evidence) so the app works without an Earth Engine sign-in, and [attach a backend](#configure-a-deployment).
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
+
 ## Scientific workflow
 
 1. Define the target population, sampling design, class legend and interpretation protocol.
@@ -73,6 +116,8 @@ Do not evaluate a protocol or model from the demo labels.
 8. Resolve or model disagreement according to a protocol specified before analysis.
 
 PlotCall supports this workflow; it does not choose the sampling design or adjudication rule.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Build batches
 
@@ -105,6 +150,8 @@ python src/build_label_batches.py \
 
 A qualification batch can instead use `--stage qualify --feedback end`.
 
+<p align="right"><a href="#contents">↑ back to contents</a></p>
+
 ## Optional baked evidence
 
 Static evidence avoids repeated remote computation and lets the main interpretation workflow continue without Earth Engine. Install the optional dependencies first:
@@ -123,6 +170,8 @@ python src/build_batch_dense.py --batch app/batches/b001.json
 ```
 
 The builders update the batch and create sidecar files where required. Commit both together. Their recipes, dataset identifiers, date ranges and versions are part of the scientific provenance and should be recorded for each deployment.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Configure a deployment
 
@@ -146,7 +195,13 @@ The GitHub Pages workflow uses the committed `app/config.js` by default. If the 
 
 `sheetUrl`, `submitToken`, project IDs and OAuth client IDs are visible to every browser and must not be treated as secrets. Never put an Earth Engine service-account private key in browser code or repository configuration.
 
-To use the supplied Sheets backend:
+### Publish the app
+
+`app/` is the whole website: upload it to any static web root. The included workflow publishes it to GitHub Pages on every push to `main`, which requires **Settings ▸ Pages ▸ Source: GitHub Actions** to be set on the repository — without it the deploy job fails with `Get Pages site failed`.
+
+### The Sheets backend
+
+The supplied backend is an Apps Script bound to a Google Sheet. Its only powers are the ones `Code.gs` grants it: append a label row, return this campaign's rows, and mint a short-lived read-only Earth Engine token.
 
 1. Create a Google Sheet.
 2. Open **Extensions → Apps Script**.
@@ -154,6 +209,8 @@ To use the supplied Sheets backend:
 4. Set the script properties described at the top of that file.
 5. Deploy it as a web application and place its `/exec` URL in `app/config.js`.
 6. Verify `<sheetUrl>?action=ping` before a labelling session.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Output and round reports
 
@@ -174,6 +231,8 @@ python src/label_rounds.py --csv exports/*.csv --campaign example
 
 The report describes returned calls, exclusions, disagreement and observed change yield. If a decision threshold is part of the design, supply it explicitly with `--binding`. An observed yield is conditional on the sample and interpretation process; it is not a population prevalence estimate unless the sampling design supports that inference.
 
+<p align="right"><a href="#contents">↑ back to contents</a></p>
+
 ## Default interpretation protocol
 
 The included example uses three broad classes:
@@ -185,6 +244,8 @@ The included example uses three broad classes:
 The reader assigns the majority class within the yellow 10 m cell for both endpoint years. The app derives the transition from those two calls.
 
 This legend is implemented in `app/label_app.html`, not `app/config.js`. If you change it, update the class keys, keyboard shortcuts, hints, full cribsheet, calibration data, downstream schemas and tests together. The endpoint years are also part of the current implementation and must be changed consistently in the app and evidence builders.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Interpretation limits
 
@@ -199,6 +260,8 @@ This legend is implemented in `app/label_app.html`, not `app/config.js`. If you 
 
 Preserve the deployed app version, batch files, evidence metadata and written protocol with the resulting labels.
 
+<p align="right"><a href="#contents">↑ back to contents</a></p>
+
 ## Tests
 
 ```bash
@@ -210,6 +273,8 @@ Browser tests use Playwright. Install its browser runtime when required:
 ```bash
 python -m playwright install chromium
 ```
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## Repository layout
 
@@ -227,8 +292,13 @@ src/
   label_cell.py           Sentinel-2 cell geometry
   label_rounds.py         label collection and round summaries
 tests/                    unit and browser tests
+docs/                     architecture diagram, icon and screenshots
 ```
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
 
 ## License and attribution
 
 Code is released under the MIT License. Imagery and derived products retain the terms and attribution requirements of their source datasets. The interface includes source attribution for the default map and evidence layers.
+
+<p align="right"><a href="#contents">↑ back to contents</a></p>
