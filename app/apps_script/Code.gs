@@ -1,6 +1,6 @@
 /**
- * PlotCall - Google Sheet backend
- * ==============================
+ * RECOVER labelling - Google Sheet backend
+ * ========================================
  * Deploy: Extensions > Apps Script in the target Sheet, paste this file, then
  * Deploy > New deployment > Web app, "Execute as: Me", "Who has access:
  * Anyone". Copy the /exec URL into app/config.js as sheetUrl.
@@ -45,10 +45,14 @@
  *    sheet later has no way to tell which is current. The key is
  *    (campaign, batch_id, point_id, expert_id) and a re-save replaces in place.
  *
- *    THE `expert_id` IS PART OF THE KEY AND IS NOT OPTIONAL. Independent
- *    readings must remain separate rows for an agreement calculation. A key
- *    without the expert makes one reading overwrite the other. `labeller` is a
- *    display name; the stable identifier is `expert_id` from config.js.
+ *    THE `expert_id` IS PART OF THE KEY AND IS NOT OPTIONAL. Two people reading
+ *    the same point is the campaign's only measurement of the label noise that
+ *    caps change-F1 (ACTIVE_LEARNING.md), and a key without the expert makes
+ *    the second reading overwrite the first instead of sitting beside it. The
+ *    failure is silent: the sheet looks complete and the agreement number is
+ *    computed over nothing. `labeller` is kept as the *display name* -- people
+ *    rename themselves and type their own name four ways -- and the stable
+ *    identifier is `expert_id`, which comes from the roster in config.js.
  * 3. ACKNOWLEDGE BY ID. The client keeps a row "dirty" until this script names
  *    it in `accepted`. A 200 with no id list would let a partial write look
  *    complete and lose labels.
@@ -342,7 +346,8 @@ function dropReadCaches_() {
  * A web app deployed "Anyone", plus a token that ships inside config.js, means
  * anyone you gave the app to can mint Earth Engine tokens for your project.
  * That is a real step up from "can write rows to a sheet", and two things bound
- * it. NOT `roles/earthengine.viewer`: that role carries
+ * it. NOT `roles/earthengine.viewer`, which is what this said and is what the
+ * deployment was granted: measured 2026-08-28, viewer carries
  * `earthengine.computations.create` and NOT `earthengine.maps.create`, so the
  * account computes, self-tests clean and is refused every map tile -- every
  * auxiliary overlay in the app comes back empty. The grant is
@@ -533,7 +538,7 @@ function eeTokenSelfTest() {
   Logger.log('expires_in: ' + token.expires_in + ' s');
   Logger.log('token: ' + token.access_token.slice(0, 12) + '...('
              + token.access_token.length + ' chars)');
-  // `value:compute`, not a listing. The app never reads deployment assets;
+  // `value:compute`, not a listing. The app never reads this project's assets;
   // reduceRegion and getThumbId are COMPUTATIONS, so the probe has to be one
   // too or it passes on an account that cannot do the job it has. It is also
   // the cheapest possible one: the constant 1, evaluated.
@@ -690,7 +695,7 @@ function doGet(e) {
   // deployment; everything that returns data does not. The app calls this on
   // boot before it claims to be connected to anything.
   if (action === 'ping')
-    return json_({ ok: true, service: 'plotcall',
+    return json_({ ok: true, service: 'recover-labelling',
                    key: ['campaign', 'batch_id', 'point_id', 'expert_id'],
                    token_required: !!SUBMIT_TOKEN,
                    ee_service_account: !!PropertiesService.getScriptProperties()

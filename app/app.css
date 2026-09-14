@@ -1,0 +1,1242 @@
+/* Styles for label_app.html.
+ *
+ * Lifted verbatim out of the <style> block in that file, where 1,144 lines of
+ * CSS sat between the markup and the app's JavaScript. Nothing here was
+ * rewritten in the move: this file is the block as it stood, so `git log -M`
+ * still follows it.
+ */
+  /* ── the palette ────────────────────────────────────────────────────────
+     The Weather Lab APP, not the deepmind.google brand site. They differ on
+     the two things that decide whether this reads right, and the brand site is
+     the wrong one to copy:
+
+     THE GREYS ARE WARM. `#e9e9e7` ground, `#f2f2ef` panels, `#d7d7d2`
+     dividers, `#6f6f6b` secondary text -- a slightly yellow-green neutral, not
+     the cool blue-grey of the marketing pages (`#f8f9fc`, `#eff2f7`). And
+     nothing is pure white. A stark white panel is the single most obvious tell.
+
+     THE CHROME IS QUIET. Controls are a translucent white on that warm ground
+     with a soft `#cfcfc9` hairline, not a saturated fill: toggles are
+     `#d3d3cd` with a `#5c5c58` knob, status chips are an outline. Colour is
+     spent only where it MEANS something -- which here is the three land-cover
+     classes and the two accents.
+
+     Both of those need the panel ground to be `--surface: #f2f2ef` rather than
+     white, because `--control` is a translucent white and it has nothing to sit
+     on otherwise. If a panel here ever goes back to `#fff`, every control on it
+     disappears.
+
+     LIGHT IS THE DEFAULT and dark is a toggle (`html[data-theme="dark"]`,
+     remembered in localStorage, applied before first paint by the script under
+     this block). Every rule below is written against these names only -- a
+     literal colour in a rule is a rule that has no dark reading, which is the
+     one way this can quietly break. The exceptions are deliberate and marked:
+     anything drawn ON TOP OF IMAGERY (the swipe divider and knob, the chip
+     scrims, the year badges, the lightbox) is fixed dark-on-bright in both
+     themes, because what it sits on does not change with the theme. */
+  :root {
+    color-scheme: light;
+
+    /* the warm neutral ramp. `--bg` is the app ground, `--surface` the panels
+       and cards, `--surface-2/3` recessed bands inside them. */
+    --bg: #e9e9e7;
+    --surface: #f2f2ef; --surface-2: #ececea; --surface-3: #e4e4e0;
+    --ink: #111111; --muted: #6f6f6b; --faint: #8b8b86;
+    --line: #d7d7d2; --line-soft: #e2e2dd;
+    --line-strong: #cfcfc9; --hover: rgba(17,17,17,.05);
+    --shadow: 0 2px 8px rgba(0,0,0,.07);
+    /* Floating over the map: a FROSTED surface, not a translucent white one.
+       Two glasses, because the two jobs are opposite. `--glass` is a surface
+       you look THROUGH -- the big panel, ~60% opaque, where the map's colour
+       is still legible as colour and the 24 px blur is doing most of the work
+       of making type readable. `--glass-2` is a surface you read ON -- the
+       small floating cards, which are a fifth of the area and would be a
+       smear at the same alpha. `--glass-band` lifts a group inside the panel
+       and `--glass-sunk` recesses one, which is where the section-to-section
+       variation comes from; the gutters between bands stay at `--glass` and
+       are the most transparent thing on screen.
+
+       Never `opacity` on the box -- that fades the type with the ground.
+       One `--glass-blur` so they all frost as one.
+
+       SATURATION IS THE COLOUR BUG. `saturate(125%)` was there to put back
+       what the blur washes out, and over Norwegian forest it did the opposite
+       of what a neutral chrome needs: it took the map's green, amplified it,
+       and spread it through 30 px of blur until the whole panel read olive and
+       the warm grey palette was gone. This is satellite imagery -- large,
+       saturated, single-hue fields are the NORMAL case, not an edge one. So
+       the blur now DE-saturates slightly. The chrome keeps its own colour and
+       the map's colour stays on the map, which is where it is being read.
+
+       `--glass-aux` is a third surface, for the collapsed cards. They were on
+       `--glass-sunk`, a 7% wash, which is a recess when it sits on `--glass`
+       and is very nearly nothing when it sits straight on the imagery: three
+       cards whose titles were unreadable over anything busy.
+
+       ALPHA IS TUNED WITH THE MAP PRESENT. At 76% the panel keeps the colour
+       and broad structure of the imagery visible without turning pale scenes
+       into a white card. The 14 px frost, not another child background, is
+       what keeps text readable over detail. */
+    --glass: rgba(245,245,242,.76); --glass-2: rgba(246,246,243,.82);
+    --glass-aux: rgba(244,244,240,.72);
+    --glass-band: rgba(255,255,255,.12); --glass-sunk: rgba(120,120,110,.06);
+    --glass-blur: blur(14px) saturate(94%);
+    --glass-edge: rgba(0,0,0,.08);
+    --veil: rgba(233,233,231,.94); --sw-edge: rgba(0,0,0,.15);
+
+    /* THE PANEL WIDTH, and it is a share of the window rather than a number.
+       `app.js` overwrites this with a px value as soon as it runs -- clamped to
+       what the window can afford and honouring a dragged width -- but the
+       declaration here is what the FIRST PAINT uses, so the panel does not
+       land at a fixed 430 px and then jump. Every rule that positions off the
+       panel (the lightbox, the map controls, the swipe) reads this one token.
+       Kept in step with `panelBounds()` in app.js: 32% of the window, floored
+       at 320 px for the two three-button class rows, capped at 680 because a
+       form does not get better past it and the map is the instrument. */
+    --panel-w: clamp(320px, 32vw, 680px);
+    /* The quiet control fill: translucent white on the warm ground, with the
+       soft hairline. This is the whole low-contrast character. */
+    --control: rgba(255,255,255,.55); --control-hover: rgba(255,255,255,.9);
+    --tonal: #e4e4e0; --tonal-hover: #dcdcd7; --seg-on: #ffffff;
+
+    /* Their blue, darkened for the places it is read as small TEXT --
+       `#2f76e5` on `#f2f2ef` is 4.1:1 and most of this app's type is 11.5 px.
+       `--accent-bright` is the untouched one, for fills and swatches. */
+    --accent: #2064d4; --accent-bright: #2f76e5;
+    --accentbg: #e3ecfb; --accentbg-2: #d2e0f8; --accentline: #a9c4ef;
+    --dropbg: rgba(47,118,229,.14);
+    /* The primary action is charcoal, the way their neutral controls are --
+       not the accent. That keeps blue meaning one thing: selected. */
+    --btn-fill: #222222; --btn-ink: #ffffff;
+    --btn-off: #dededa; --btn-off-ink: #6f6f6b;
+    /* Used once: the batch progress bar. */
+    --brand-ramp: linear-gradient(90deg,#2f76e5,#2daeb8 45%,#87d85e 100%);
+
+    --nature: #2f9e44; --cropland: #f0a30a; --artificial: #d6336c;
+    /* The swatch colours above are chosen to be told apart at 9 px on a map.
+       They are NOT readable as text: #f0a30a on the panel's #f2f2ef is a 2:1
+       contrast ratio, and "Cropland" set in it in the legend was, in practice,
+       invisible. Every place a class NAME is written uses the -ink pair. */
+    --nature-ink: #1a7f37; --cropland-ink: #8f5a06; --artificial-ink: #b02a5b;
+    --nature-bg: #e6f4e8; --cropland-bg: #f6efdd; --artificial-bg: #f8e8ee;
+
+    --ok: #1f6f43; --okbg: #e6f1e8; --okline: #c3ddc9; --on-ok: #ffffff;
+    --warn: #8a6100; --warnbg: #f6efdc; --warnline: #e2d09a;
+    --err: #b3261e; --errbg: #f7e6e4; --errline: #e6bfba;
+    --violet: #5340a8; --violet-2: #9b8afb;
+    --violetbg: #eeecf7; --violetline: #cfc9e8;
+    --pink: #a3336f; --pinkbg: #f6e9f0; --pinkline: #e3c4d6;
+  }
+  /* Only the tokens are restated. If a value has to be repeated here that is
+     not a colour -- a radius, a size -- something above it was written wrong.
+     The dark theme is the same neutral, rotated: warm charcoals, not the blue
+     ones the brand site uses. */
+  html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --bg: #1a1a18;
+    --surface: #232320; --surface-2: #2b2b28; --surface-3: #333330;
+    --ink: #f2f2ef; --muted: #b0b0aa; --faint: #8b8b86;
+    --line: #3a3a36; --line-soft: #2f2f2c;
+    --line-strong: #4a4a45; --hover: rgba(242,242,239,.07);
+    --shadow: 0 2px 8px rgba(0,0,0,.36);
+    /* Darker AND thinner than the light pair: imagery is bright, so the same
+       alpha over a charcoal reads as opaque. `--glass-blur` is not restated --
+       one frost for both themes. */
+    --glass: rgba(28,28,26,.78); --glass-2: rgba(34,34,31,.84);
+    --glass-aux: rgba(30,30,27,.74);
+    --glass-band: rgba(255,255,255,.035); --glass-sunk: rgba(0,0,0,.14);
+    --glass-edge: rgba(255,255,255,.10);
+    --veil: rgba(26,26,24,.94); --sw-edge: rgba(255,255,255,.28);
+    --control: rgba(255,255,255,.07); --control-hover: rgba(255,255,255,.14);
+    --tonal: #333330; --tonal-hover: #3d3d39; --seg-on: #46463f;
+
+    /* The same swap the light theme makes, the other way up: on `#232320`
+       their `#2f76e5` is 3.2:1, so the readable end of the ramp is the light
+       one and the bright blue becomes the fill. */
+    --accent: #a8c8f5; --accent-bright: #6ea3ee;
+    --accentbg: rgba(47,118,229,.22); --accentbg-2: rgba(47,118,229,.34);
+    --accentline: rgba(168,200,245,.40); --dropbg: rgba(47,118,229,.20);
+    --btn-fill: #f2f2ef; --btn-ink: #222222;
+    --btn-off: #333330; --btn-off-ink: #8b8b86;
+
+    /* The three swatches are NOT restated: they are the map's colours and the
+       chips' colours, and a swatch that means one thing on the raster and
+       another in the legend is worse than a swatch that is slightly dark. */
+    --nature-ink: #7fd18e; --cropland-ink: #e8c06a; --artificial-ink: #f091b1;
+    --nature-bg: rgba(127,209,142,.14); --cropland-bg: rgba(232,192,106,.14);
+    --artificial-bg: rgba(240,145,177,.14);
+
+    --ok: #7fd18e; --okbg: rgba(127,209,142,.16); --okline: rgba(127,209,142,.36);
+    --on-ok: #1a1a18;
+    --warn: #e0b45c; --warnbg: rgba(224,180,92,.15);
+    --warnline: rgba(224,180,92,.36);
+    --err: #f0938c; --errbg: rgba(240,147,140,.16); --errline: rgba(240,147,140,.38);
+    --violet: #bdb0f0; --violet-2: #9b8afb;
+    --violetbg: rgba(155,138,251,.16); --violetline: rgba(155,138,251,.38);
+    --pink: #e8a0c4; --pinkbg: rgba(232,160,196,.16);
+    --pinkline: rgba(232,160,196,.36);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+
+  /* Keyboard focus was invisible everywhere -- there was not one `:focus` rule
+     in the file, in an app whose whole interaction model is keys. `:focus-
+     visible` rather than `:focus` so a mouse click does not leave a ring
+     parked behind it. */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+                   border-radius: 4px; }
+  /* Dark grounds: the accent blue disappears into them. Inset, because an
+     outward ring on a chip inside an `overflow-x` strip is clipped. */
+  #ev-strip :focus-visible, #lightbox :focus-visible {
+    outline-color: #fff; outline-offset: -3px; }
+
+  /* Nine `chipwait` sheens loop behind the map at once, and `nudge` shakes a
+     required field. Both are decoration on an instrument. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  body { font-family: "Google Sans", Roboto, Arial, sans-serif; color: var(--ink);
+         background: var(--bg); display: flex; flex-direction: column;
+         height: 100vh; overflow: hidden; font-size: 16px; }
+
+  /* ── header ─────────────────────────────────────────────────────────── */
+  header {
+    padding: 10px 18px; background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0; display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { font-size: 17px; font-weight: 500; white-space: nowrap;
+               letter-spacing: -.012em; }
+  header .sub { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  header .spacer { flex: 1 1 auto; }
+  header input[type=text], header select {
+    font-size: 13.5px; padding: 4px 12px; border: 1px solid var(--line-strong);
+    border-radius: 999px; width: 130px; background: var(--control);
+    color: inherit; font-family: inherit;
+  }
+  header input[type=text].needed, header select.needed {
+    box-shadow: inset 0 0 0 1.5px var(--err); background: var(--errbg);
+    animation: nudge .4s ease-in-out 2;
+  }
+  header select:disabled { background: var(--surface-3); color: var(--faint); }
+  /* ── the control grammar ───────────────────────────────────────────────
+     Four rules run through everything below, and three of them are what the
+     first draft of this got wrong by copying the marketing site instead of
+     the app.
+
+     THE SHAPE SCALE IS COARSE AND CONSISTENT: 8 px for a chip or a badge,
+     16 px for a row, a field or a tile, ~24 px for a floating panel, and a
+     full pill for anything that toggles. Nothing lands between those.
+
+     CHROME IS QUIET. A control is `--control` -- a translucent white on the
+     warm ground -- with a soft `--line-strong` hairline. Not a saturated fill
+     and not a heavy border. Their own status chip is exactly that, and their
+     toggles are `#d3d3cd` with a `#5c5c58` knob: muted, not colourful.
+
+     A SET OF EXCLUSIVE OPTIONS IS A TRACK, NOT A ROW OF BOXES. One filled
+     track with `padding: 4px` and `gap: 4px` holding transparent pill
+     segments, the chosen one RAISED to white. Confidence, the year picker and
+     the chart's series toggle are all that shape.
+
+     WEIGHT 700 APPEARS THREE TIMES IN 688 KB OF DEEPMIND'S CSS. The scale is
+     500 for a title, 450 for a control, 400 for body. Section labels are
+     sentence case in a quiet grey -- NOT small-caps eyebrows, which is a
+     different design language and was the loudest thing on the panel.
+
+     The numbers are theirs; the SIZES are scaled to this app's 13 px base. A
+     24 px button gutter in a panel that has to hold nine years of evidence is
+     a different mistake, and `test_the_control_stack_does_not_swallow_the_map`
+     is the ceiling that says so. */
+  .pill { cursor: default; }
+  #pill-sync { cursor: pointer; }
+  @keyframes nudge { 0%,100% { transform: translateX(0); }
+                     25% { transform: translateX(-3px); }
+                     75% { transform: translateX(3px); } }
+  .pill {
+    font-size: 12px; font-weight: 450; padding: 3px 10px; border-radius: 8px;
+    border: 1px solid var(--line-strong); background: var(--control);
+    white-space: nowrap; font-family: inherit; color: var(--muted);
+    line-height: 1.45;
+  }
+  button.pill:hover { background: var(--control-hover); }
+  .pill.ok   { background: var(--okbg);   color: var(--ok);   }
+  .pill.warn { background: var(--warnbg); color: var(--warn); }
+  .pill.err  { background: var(--errbg);  color: var(--err);  }
+  /* Fixed width because the label swaps between "dark" and "light" on click,
+     and a header that reflows under the cursor makes the button feel like it
+     did something other than what it did. */
+  #btn-theme { min-width: 66px; text-align: center; }
+
+  /* progress bar under the header */
+  #progress-wrap { height: 4px; background: var(--line); flex-shrink: 0; }
+  #progress { height: 100%; width: 0%; background: var(--brand-ramp); transition: width .2s; }
+
+  /* NOT `.body`. The map+panel row and the inner text of `details.legend`
+     and `details.hint` were both spelled `body`, so the layout row's
+     `display:flex` reached down into the legend and laid its three class
+     definitions out as three squashed columns -- the whole "what counts as
+     what" block was unreadable, and had been since the flex layout landed.
+     A layout container gets an id; `body` is too generic to own a rule. */
+  #layout { display: flex; flex: 1 1 0; min-height: 0; position: relative; }
+  details .body { display: block; }
+  #map { flex: 1 1 auto; position: relative; }
+
+  /* ── control stack over the map ─────────────────────────────────────── */
+  #ctrl-right {
+    position: absolute; top: 16px; right: calc(var(--panel-w, 430px) + 28px);
+    z-index: 3;
+    display: flex; flex-direction: column; gap: 0; align-items: stretch;
+    width: 300px;
+    max-height: calc(100% - 32px); overflow-y: auto; overflow-x: hidden;
+    padding: 0;
+    background: var(--glass-2);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge); border-radius: 42px;
+    box-shadow: var(--shadow);
+  }
+  .controls-head {
+    flex: 0 0 auto; min-height: 72px; padding: 16px 20px 12px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .controls-head .title {
+    font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: -.015em;
+  }
+  .card {
+    background: transparent; border: none; border-top: 1px solid var(--line);
+    border-radius: 0; padding: 12px 20px 14px 24px; font-size: 13.5px;
+    box-shadow: none; width: 100%; flex-shrink: 0;
+  }
+  #btn-cards {
+    margin-left: auto; border: 1px solid var(--line-strong); background: var(--control);
+    border-radius: 999px; padding: 6px 11px; font-size: 12.5px; font-weight: 500;
+    color: var(--muted); cursor: pointer; box-shadow: none; flex-shrink: 0;
+  }
+  #btn-cards:hover { background: var(--control-hover); }
+
+  .card > .hdr { font-weight: 500; display: flex; align-items: center; gap: 8px;
+                 min-height: 31px; margin-bottom: 3px; cursor: pointer; user-select: none;
+                 /* a <button>, so the UA styling comes back off */
+                 width: 100%; border: none; background: none; padding: 0;
+                 font-family: inherit; font-size: 15.5px; color: inherit;
+                 text-align: left; }
+  .card > .hdr .caret { margin-left: auto; color: var(--muted); font-size: 12px; }
+  /* Reference, not instrument: Earth Engine is optional by design and the
+     shortcut list is read once. Recessive so the eye lands on the two cards
+     that are actually used per point. */
+  /* Still quieter than an open card -- one step of alpha and no shadow --
+     but a surface, which `--glass-sunk` on bare imagery is not. */
+  .card.aux { background: transparent; box-shadow: none; }
+  .card.aux > .hdr { color: var(--muted); font-weight: 450; }
+  /* The type scale went up; the control stack must not, because what it sits
+     on is the imagery being labelled. Tighter leading buys back the px. */
+  .card label { display: flex; align-items: center; gap: 9px; cursor: pointer;
+                padding: 2px 0; line-height: 1.3; }
+  /* The one control the OS drew rather than this file, which made it the one
+     saturated blue on a panel whose whole character is a muted neutral -- and
+     the one thing that ignored the dark theme. A flat `--faint` box with the
+     panel colour as the tick reads correctly both ways round. */
+  input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 20px; height: 20px; flex: 0 0 auto; margin: 0;
+    border: 1px solid var(--line-strong); border-radius: 5px;
+    background: var(--control); cursor: pointer;
+    display: grid; place-items: center;
+  }
+  input[type=checkbox]:checked { background: var(--faint); border-color: transparent; }
+  input[type=checkbox]:checked::after {
+    content: ''; width: 5px; height: 10px; margin-top: -2px;
+    border-right: 2px solid var(--surface); border-bottom: 2px solid var(--surface);
+    transform: rotate(45deg);
+  }
+  input[type=checkbox]:disabled { cursor: default; opacity: .45; }
+  /* The switch that brings the app's own instrument to life, which read as an
+     ordinary checkbox above six greyed-out controls. */
+  .card label.master { padding: 7px 9px; margin: 0 -5px 5px; border-radius: 18px;
+                       background: var(--glass-band); border: none;
+                       align-items: center; }
+  .card label.master input {
+    order: 2; width: 54px; height: 34px; margin-left: auto;
+    border-radius: 999px; background: var(--tonal); padding: 3px;
+    display: flex; align-items: center; justify-content: flex-start;
+  }
+  .card label.master input::after {
+    content: ''; width: 26px; height: 26px; margin: 0;
+    border: none; border-radius: 50%; background: var(--faint);
+    transform: none; transition: transform .16s ease;
+  }
+  .card label.master input:checked { background: var(--line-strong); }
+  .card label.master input:checked::after {
+    width: 26px; height: 26px; margin: 0; border: none;
+    background: var(--ink); transform: translateX(20px);
+  }
+  .card label.master span { order: 1; }
+  .card label.master b { color: var(--accent); }
+  .card .note { color: var(--muted); font-size: 12.5px; margin-top: 5px;
+                line-height: 1.3; }
+  .card .note:empty { display: none; margin: 0; }
+  .card select, .card input[type=text] {
+    flex: 1; font-size: 14px; padding: 6px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px; background: var(--control); min-width: 0;
+    color: inherit; font-family: inherit;
+  }
+  .card button {
+    border: 1px solid var(--line-strong); background: var(--control);
+    color: var(--ink); border-radius: 999px; cursor: pointer; font-size: 14px;
+    line-height: 1.3; padding: 6px 12px; font-weight: 450; font-family: inherit;
+  }
+  /* Was #bbb on #f4f5f7 -- 1.76:1. The Wayback card ships with six disabled
+     controls, so the app's own "instrument" opened as an unreadable smear. */
+  .card button:disabled { color: var(--faint); cursor: default;
+                          background: none; border-color: var(--line); }
+  .card button:not(:disabled):hover { background: var(--control-hover); }
+  .row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  /* The most-clicked buttons in the app, and a bare chevron made them ~24x22. */
+  #wb-prev, #wb-next, #wb-b-prev, #wb-b-next {
+    min-width: 28px; min-height: 26px; }
+
+  /* ── wayback swipe compare ──────────────────────────────────────────── */
+  #wb-compare-map { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+  #wb-swipe { position: absolute; top: 0; bottom: 0; width: 26px; margin-left: -13px;
+              z-index: 2; cursor: ew-resize; touch-action: none; }
+  #wb-swipe::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 2px; margin-left: -1px; background: #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,.55); }
+  /* Not at 50%: the point being labelled is at the centre of the map, and a
+     34px knob parked on top of it hides the one marker the interpreter must
+     always be able to see. The divider line still crosses the point, which is
+     what the comparison needs. */
+  #wb-swipe .knob { position: absolute; top: 22%; left: 50%;
+    transform: translate(-50%,-50%); width: 34px; height: 34px; border-radius: 50%;
+    background: #fff; color: #333; box-shadow: 0 1px 6px rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; user-select: none; }
+  /* ONE ROW, TOP-LEFT, and both dates in it.
+     These are children of `#map`, which is FULL WIDTH -- the panel is a layer
+     over it, not a second pane -- so `left: 10px` / `right: 10px` put the
+     right-hand date underneath the PANEL and the left one underneath the chip
+     FILMSTRIP. Measured at 1440x900: label B spanned x 1233-1430 against a
+     panel starting at 967, and `elementFromPoint` at the centre of each
+     returned panel content and a chip cell. The right side's date read as
+     simply missing, which is what it was.
+     The obvious repair -- top edge, each label in its own half -- does not work
+     either: `#ctrl-right` spans x 651-951 over almost the map's full height, so
+     while the Map controls card is open there is no free space in the right
+     half at all. Top-left is the one region that is always clear, `◀` and `▶`
+     say which half each describes, and the pair reads as a pair.
+     z-index 3 is the MAP layer (compare-map 1, divider 2, filmstrip 3, panel 4)
+     -- outranking the panel would only turn "hidden" into "a date pill over
+     the form". */
+  #wb-swipe-labels { position: absolute; top: 14px; left: 56px; z-index: 3;
+    display: flex; gap: 6px; pointer-events: none;
+    max-width: calc(100% - var(--panel-w, 430px) - 80px); }
+  .wb-swipe-label { background: rgba(17,17,17,.78); color: #fff;
+    font-size: 12px; font-weight: 500; padding: 3px 9px; border-radius: 5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; }
+  /* Under them, and centred on the VISIBLE map rather than on the full-width
+     one it is a child of. The foot of the map is the filmstrip. */
+  #flicker-hint { position: absolute; top: 46px;
+    left: calc((100% - var(--panel-w, 430px)) / 2);
+    transform: translateX(-50%); z-index: 3; background: rgba(17,17,17,.72);
+    color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 6px;
+    pointer-events: none; }
+
+  /* ── right-hand labelling panel ─────────────────────────────────────── */
+  /* A LAYER OVER THE MAP, not a second app pane. The inset on all four sides
+     is load-bearing: imagery remains visible around every rounded corner, so
+     the sheet reads as the same floating control surface as the reference
+     rather than as a conventional application sidebar. The one translucent
+     shell does the frosting; children stay clear unless they are controls. */
+  #panel {
+    position: absolute; top: 12px; bottom: 12px; right: 12px;
+    width: min(var(--panel-w, 430px), calc(100% - 24px)); z-index: 4;
+    background: var(--glass);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge);
+    border-radius: 42px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #panel-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 12px;
+                z-index: 5; cursor: col-resize; background: transparent; }
+  /* The call does not scroll. The head is a fixed flex child; only the
+     evidence below it moves. `min-height:0` on the scroller is what stops
+     a long evidence block from stretching the flex column instead of
+     scrolling inside it. */
+  /* `max-height` is the short-window guard: a head that is allowed to grow
+     without limit can squeeze the evidence to nothing on a small screen, which
+     is the failure this whole split was meant to prevent. It is 84% rather
+     than the old 62% because the head now carries the whole form -- the two
+     dates, both flag groups, confidence, notes and the buttons -- and 62%
+     put `#panel-head-scroll` into permanent overflow on a laptop, which is
+     the same disappearing act one level in. It went 76 -> 84 when the type
+     scale came up to Weather Lab's: bigger rows need more of the column, and
+     at 76% the notes box was clipped to a sliver on a 950 px window.
+     `#panel-scroll` keeps its own `min-height`, so the evidence still cannot
+     be squeezed to nothing from this side. */
+  #panel-head { flex: 0 1 auto; min-height: 0; padding: 18px 22px 14px;
+                border-bottom: 1px solid var(--line); background: none;
+                max-height: 84%; display: flex; flex-direction: column;
+                overflow: hidden; }
+  #panel-head-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto;
+                       scrollbar-width: thin;
+                       scrollbar-color: var(--line-strong) transparent; }
+  #panel-head-scroll::-webkit-scrollbar { width: 8px; }
+  #panel-head-scroll::-webkit-scrollbar-thumb { background: var(--line-strong);
+                                                border-radius: 4px; }
+  /* A flag row cut in half by the fold reads as a rendering fault, not as
+     "there is more of the form below" -- and this head clips on any short
+     window now that it carries the whole form. `more` is set from JS because
+     "am I overflowing, and am I already at the bottom" is not a CSS question,
+     and an unconditional fade would grey out the notes box on every window
+     where nothing is hidden at all. */
+  #panel-head-scroll.more {
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+            mask-image: linear-gradient(#000 calc(100% - 22px), transparent); }
+  #panel-head #transition-out { flex: 0 0 auto; }
+  /* Pinned like the read-out above it: `.flags` is a flex container and, as a
+     flex ITEM of the head's column, would otherwise shrink on a short window --
+     which is the one place these two must not go. */
+  #flags-call { flex: 0 0 auto; margin-top: 7px; }
+  #flags-call:empty { display: none; }
+  #panel-head .sec:first-of-type { margin-top: 12px; }
+  #panel-scroll { flex: 1 1 0; min-height: 96px; overflow-y: auto;
+                  margin: 0 7px 12px 0; padding: 12px 15px 10px 22px;
+                  scrollbar-gutter: stable;
+                  scrollbar-width: thin;
+                  scrollbar-color: var(--line-strong) transparent; }
+  #panel-scroll::-webkit-scrollbar { width: 8px; }
+  #panel-scroll::-webkit-scrollbar-thumb { background: var(--line-strong);
+                                           border-radius: 4px; }
+  /* Pinned for the same reason `flags-call` is: these are flex ITEMS of the
+     head's column and would otherwise be the thing that shrinks on a short
+     window. Save must never be somewhere the interpreter has to go and find. */
+  #panel-actions { flex: 0 0 auto; margin-top: 2px; }
+  #panel-actions .actions { margin-top: 8px; }
+
+  .pt-hdr { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  /* The point id is a join key nobody reads; the transition below is what the
+     whole panel exists to produce, and it was set two points SMALLER. */
+  .pt-hdr .id { font-size: 14px; font-weight: 500; color: var(--muted);
+                font-variant-numeric: tabular-nums; }
+  .coords { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+            margin-bottom: 6px; }
+  .coords a { color: var(--accent); text-decoration: none; margin-left: 6px; }
+  .coords a:hover { text-decoration: underline; }
+
+  /* Sections are transparent rows on the one frosted shell. Stacking another
+     translucent card under every group is what made the old panel cloudy. */
+  .sec { margin-top: 12px; padding: 13px 2px 5px; border-radius: 0;
+         border-top: 1px solid var(--line); background: transparent; }
+  .sec > .lab { font-size: 15px; font-weight: 500; color: var(--muted);
+                margin-bottom: 8px;
+                display: flex; align-items: center; gap: 6px; }
+  .sec > .lab .kbd-hint { font-weight: 400; text-transform: none; letter-spacing: 0;
+                          margin-left: auto; }
+  /* Confidence is required to save. The section is greyed on the
+     `uninterpretable` path, where it is not -- so this rides the same opacity
+     and stops claiming to be required exactly when it stops being required. */
+  .sec > .lab .req { font-weight: 450; text-transform: none; letter-spacing: 0;
+                     font-size: 11px; color: var(--warn);
+                     background: var(--warnbg); border: 1px solid var(--warnline);
+                     border-radius: 4px; padding: 0 4px; }
+
+  .choices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .choice {
+    border: 1px solid var(--line-strong); background: var(--control);
+    border-radius: 18px;
+    padding: 10px 4px; cursor: pointer; text-align: center; font-size: 14px;
+    font-weight: 450; color: var(--ink); display: flex; flex-direction: column;
+    align-items: center; gap: 5px; line-height: 1.2; font-family: inherit;
+  }
+  .choice .sw { width: 100%; height: 4px; border-radius: 999px; }
+  .choice .k { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .choice:hover { background: var(--control-hover); }
+  .choice.on { border-color: currentColor;
+               box-shadow: inset 0 0 0 1px currentColor; font-weight: 500; }
+  .choice.on.nature     { color: var(--nature-ink);     background: var(--nature-bg); }
+  .choice.on.cropland   { color: var(--cropland-ink);   background: var(--cropland-bg); }
+  .choice.on.artificial { color: var(--artificial-ink); background: var(--artificial-bg); }
+  .choice.dim { opacity: .45; }
+
+  #transition-out {
+    margin-top: 12px; padding: 12px; border-radius: 18px; text-align: center;
+    font-weight: 500; font-size: 20px; letter-spacing: -.006em; border: none;
+    background: var(--tonal); color: var(--muted);
+  }
+  #transition-out.change { background: var(--warnbg); color: var(--warn); }
+  #transition-out.stable { background: var(--okbg);   color: var(--ok);   }
+  #transition-out .sub { display: block; font-size: 13px; font-weight: 400;
+                         margin-top: 2px; opacity: .85; }
+
+  .flags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .flag {
+    border: 1px solid var(--line-strong); background: var(--control);
+    border-radius: 8px;
+    padding: 4px 9px; cursor: pointer; font-size: 13px; font-weight: 450;
+    color: var(--muted); font-family: inherit;
+  }
+  .flag:hover { background: var(--control-hover); }
+  /* Amber is reserved for flags that CAVEAT the label (unsure, cannot
+     interpret, imagery date gap, mixed cell). A flag that merely records an
+     observation -- "change seen, endpoints match", "flag for review" -- is selected,
+     not alarming, and gets the same accent blue as every other on-state in the
+     app. Tone comes from FLAGS, so the two cannot drift. */
+  .flag.on { background: var(--accentbg); border-color: var(--accentline);
+             color: var(--accent); font-weight: 500; }
+  .flag.on.caution { background: var(--warnbg); border-color: var(--warnline);
+                     color: var(--warn); }
+
+  /* Nine years wrap to three rows, so this track is a rounded rect rather
+     than a pill -- the segments stay pills and the gutter stays 4 px. */
+  .years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+           padding: 4px; background: var(--tonal); border-radius: 16px; }
+  .years button { border: none; background: none; border-radius: 999px;
+                  padding: 5px 2px; cursor: pointer; font-size: 13px;
+                  font-weight: 450; color: var(--ink); font-family: inherit;
+                  font-variant-numeric: tabular-nums; }
+  .years button:hover { background: var(--hover); }
+  .years button.on { background: var(--seg-on); color: var(--accent);
+                     font-weight: 500; box-shadow: 0 1px 2px rgba(18,19,23,.10); }
+  .note-small { color: var(--muted); font-size: 13px; margin-top: 5px;
+                line-height: 1.4; }
+
+  .conf { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px;
+          padding: 4px; background: var(--tonal); border-radius: 999px; }
+  .conf button { border: none; background: none; border-radius: 999px;
+                 padding: 6px 4px; cursor: pointer; font-size: 13px;
+                 font-weight: 450; color: var(--ink); font-family: inherit; }
+  .conf button:hover { background: var(--hover); }
+  .conf button.on { background: var(--seg-on); color: var(--accent);
+                    font-weight: 500; box-shadow: 0 1px 2px rgba(18,19,23,.10); }
+
+  /* 38px is two lines. It was 46 when this sat in a scroller with nothing
+     below it to push off screen; in the pinned form every pixel it takes is a
+     pixel of evidence, and `resize: vertical` is still there for the point
+     that needs a paragraph. */
+  textarea#notes {
+    width: 100%; min-height: 38px; font-family: inherit; font-size: 13.5px;
+    padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 18px;
+    resize: vertical; background: var(--control); color: var(--ink);
+  }
+
+  .actions { display: flex; gap: 6px; margin-top: 12px; }
+  .actions button {
+    flex: 1; border: none; border-radius: 999px; padding: 11px 16px;
+    cursor: pointer; font-size: 15px; font-weight: 450; font-family: inherit;
+  }
+  #btn-save { background: var(--btn-fill); color: var(--btn-ink); }
+  /* Disabled is this button's state on ARRIVAL at every point -- its most-seen
+     one -- so it is a real state, not an edge case. DeepMind's own disabled
+     primary is the surface-container fill with the muted ink on it, which
+     reads as "not yet" rather than as the smear white-on-#c9d4ea gave (1.49:1). */
+  #btn-save:disabled { background: var(--btn-off); color: var(--btn-off-ink);
+                      cursor: default; }
+  #btn-skip { flex: 0 0 84px; background: var(--control); color: var(--ink);
+              border: 1px solid var(--line-strong); }
+
+  .meta-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .meta-table td { padding: 3px 0; vertical-align: top; }
+  .meta-table td.k { color: var(--muted); padding-right: 8px; white-space: nowrap; }
+  .meta-table td.v { font-variant-numeric: tabular-nums; word-break: break-word; }
+
+  #cal-feedback { font-size: 13px; margin: -4px 0 8px; padding: 6px 9px;
+                  border-radius: 10px; line-height: 1.45; }
+  #cal-feedback.hit  { background: var(--okbg);  color: var(--ok);  }
+  #cal-feedback.miss { background: var(--errbg); color: var(--err); }
+
+  #pt-others { font-size: 12px; margin: -4px 0 8px; padding: 5px 10px;
+               border-radius: 999px; background: var(--violetbg);
+               color: var(--violet); border: none; }
+  #strip .dot.other { border-color: var(--violet-2); border-width: 2px; color: var(--violet); }
+
+  /* ── "What counts as what" ──────────────────────────────────────────────
+     Three definitions and two standing rules. It was a flex row per class with
+     the class name set in the 9 px SWATCH colour at 11.5 px, which made
+     "Cropland" a 2:1-contrast smear and clipped "Artificial" against a fixed
+     66 px column. Names now use the -ink pair, the hint gets its own column,
+     and the two rules are callouts rather than another run-on paragraph. */
+  details.legend { margin-top: 8px; border: none;
+                   background: var(--tonal); border-radius: 16px; padding: 9px 12px; }
+  /* On the summary as well as inside the fold: the fold is closed by default,
+     and a definition nobody can find is a definition nobody reads. */
+  details.legend summary .crib, details.legend .rule a {
+    font-weight: 500; color: var(--accent); text-decoration: none; }
+  details.legend summary .crib { float: right; font-size: 12px; }
+  details.legend summary .crib:hover, details.legend .rule a:hover {
+    text-decoration: underline; }
+  details.legend summary { cursor: pointer; font-size: 13.5px; font-weight: 500;
+                           color: var(--ink); }
+  details.legend[open] summary { margin-bottom: 4px; }
+  details.legend .body { font-size: 14px; line-height: 1.45; }
+  details.legend .cls { display: grid; grid-template-columns: minmax(74px, auto) 1fr;
+                        gap: 2px 10px; padding: 6px 0; align-items: baseline; }
+  details.legend .cls + .cls { border-top: 1px dashed var(--line); }
+  details.legend .nm { display: flex; align-items: center; gap: 5px;
+                       font-weight: 500; color: var(--ink); white-space: nowrap; }
+  details.legend .nm i { width: 9px; height: 9px; border-radius: 2px;
+                         flex: 0 0 auto; }
+  details.legend .hint { color: var(--muted); }
+  details.legend .rule { display: grid; grid-template-columns: 15px 1fr; gap: 7px;
+    margin-top: 8px; padding: 8px 10px; border-radius: 14px; font-size: 13.5px;
+    line-height: 1.45; background: var(--surface); border: none; }
+  details.legend .rule .ic { font-size: 13.5px; line-height: 1.45; }
+  details.legend .rule.hard { background: var(--warnbg); border-color: var(--warnline);
+                              color: var(--warn); }
+  details.legend .rule b { font-weight: 500; }
+
+  details.hint { margin-top: 10px; border: none;
+                 background: var(--warnbg); border-radius: 16px; padding: 9px 11px; }
+  details.hint summary { cursor: pointer; font-size: 13px; font-weight: 500;
+                         color: var(--warn); }
+  details.hint .why { font-size: 13px; color: var(--warn); margin-top: 5px;
+                      line-height: 1.45; opacity: .9; }
+  details.hint .body { margin-top: 7px; font-size: 13px; }
+
+  .badge { font-size: 12px; font-weight: 450; padding: 1px 9px; border-radius: 8px;
+           background: var(--control); color: var(--accent);
+           border: 1px solid var(--accentline); }
+  .badge.retrieval { background: var(--pinkbg); color: var(--pink); }
+  .badge.coverage  { background: var(--okbg); color: var(--ok); }
+  .badge.uncertainty { background: var(--warnbg); color: var(--warn); }
+
+  /* ── bottom strip: the batch at a glance ────────────────────────────── */
+  #strip {
+    flex-shrink: 0; background: var(--surface); border-top: 1px solid var(--line);
+    padding: 6px 10px; display: flex; align-items: center; gap: 8px;
+    overflow-x: auto; min-height: 38px;
+  }
+  #strip .dot {
+    position: relative;
+    width: 17px; height: 17px; border-radius: 4px; flex-shrink: 0; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); font-size: 11.5px;
+    display: flex; align-items: center; justify-content: center; color: var(--muted);
+  }
+  /* 17px is under the 24px minimum, and 1,250 bigger dots is a strip nobody
+     can scan. The picture keeps its size; the hit box grows into the 8px gap.
+     Absolute, so it does not become a third flex item and shove the number. */
+  #strip .dot::after { content: ''; position: absolute; top: -4px; bottom: -4px;
+                       left: -4px; right: -4px; }
+  #strip .dot.done    { background: var(--ok); border-color: var(--ok); color: var(--on-ok); }
+  #strip .dot.skipped { background: var(--btn-off); border-color: var(--btn-off);
+                        color: var(--btn-off-ink); }
+  #strip .dot.cur     { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #strip .dot.deferred { background: var(--surface); border-color: var(--warn);
+                         border-width: 2px; color: var(--warn); }
+  #counts { flex-shrink: 0; background: var(--surface); border-top: 1px solid var(--line);
+            padding: 4px 12px; font-size: 12px; color: var(--muted);
+            min-height: 0; }
+  #counts:empty { display: none; }
+
+  /* ── the save toast ─────────────────────────────────────────────────────
+     A save that produces no visible acknowledgement is a save you check by
+     going back and looking, and a stuck key looks exactly like a fast one. */
+  #toast { margin-top: 8px; padding: 8px 11px; border-radius: 16px;
+           background: var(--okbg); border: none;
+           color: var(--ok); font-size: 13.5px; font-weight: 500;
+           display: flex; align-items: center; gap: 8px; }
+  #toast button { margin-left: auto; border: none;
+                  background: var(--surface); color: var(--ok); border-radius: 999px;
+                  padding: 3px 11px; cursor: pointer; font-size: 12px;
+                  font-weight: 450; font-family: inherit; }
+
+  /* ── the two queues ─────────────────────────────────────────────────────── */
+  .card button.q { background: var(--control); color: var(--muted);
+                   font-weight: 450; font-size: 12px; }
+  .card button.q.on { background: var(--accentbg); color: var(--accent);
+                      font-weight: 500; }
+  #second-banner { font-size: 12px; margin: -4px 0 8px; padding: 6px 10px;
+                   border-radius: 14px; background: var(--pinkbg); color: var(--pink);
+                   border: none; line-height: 1.45; }
+  /* One disclosure idiom. Every <details> in the app now carries the same
+     right-hand caret as the card headers do, instead of the UA triangle on the
+     left, so learning one teaches the rest.
+
+     EXCEPT MAPLIBRE'S, which is why the map's ⓘ button did not work. The
+     compact attribution control is a <details><summary> too, and this rule is
+     an element selector on a page that also contains somebody else's widget:
+     it turned a 24x24 absolutely-positioned icon into a flex row and hung a
+     '▸' off the end of it, leaving nothing that behaved like the button it
+     draws. Scoped off it rather than made more specific -- the next third-party
+     <details> should be excluded here as well. */
+  details > summary:not(.maplibregl-ctrl-attrib-button) {
+    list-style: none; display: flex; align-items: center; gap: 6px; }
+  details > summary:not(.maplibregl-ctrl-attrib-button)::-webkit-details-marker {
+    display: none; }
+  details > summary:not(.maplibregl-ctrl-attrib-button)::after {
+    content: '\25B8'; margin-left: auto;
+    color: var(--muted); font-size: 12px; font-weight: 400; flex: 0 0 auto; }
+  details[open] > summary:not(.maplibregl-ctrl-attrib-button)::after {
+    content: '\25BE'; }
+  details.setup { margin-top: 6px; border-top: 1px solid var(--line);
+                  padding-top: 5px; }
+  details.setup summary { cursor: pointer; font-size: 13px;
+                          color: var(--muted); font-weight: 500; }
+
+  /* ── Earth Engine presets and legends ───────────────────────────────────
+     A layer without a legend is nine unlabelled colours, and a layer without
+     its end year answers a question it cannot see the end of. Both are
+     structural here rather than optional. */
+  .ee-group { margin-top: 6px; }
+  .ee-ask { font-size: 13px; font-weight: 450; color: var(--muted);
+            margin-bottom: 4px; }
+  button.ee-layer { display: block; width: 100%; text-align: left;
+                    margin-bottom: 3px; font-weight: 450; font-size: 13px; }
+  button.ee-layer .yr { color: var(--muted); font-weight: 400; font-size: 12px; }
+  button.ee-layer.on { background: var(--accentbg); color: var(--accent);
+                       font-weight: 500; }
+  .ee-prov { font-size: 12px; color: var(--muted); line-height: 1.35;
+             margin-bottom: 4px; }
+  .ee-legend { display: flex; flex-wrap: wrap; gap: 3px 9px; font-size: 13px;
+               color: var(--ink); align-items: center; }
+  .ee-legend .sw-row { display: flex; align-items: center; gap: 4px; }
+  .ee-legend .sw-row i { width: 10px; height: 10px; border-radius: 2px;
+                         border: 1px solid var(--sw-edge); flex-shrink: 0; }
+  .ee-legend .sw-ramp { display: block; width: 100%; height: 8px;
+                        border-radius: 3px; border: 1px solid var(--sw-edge); }
+  .ee-legend .sw-ends { width: 100%; color: var(--muted); }
+  .ee-stale { margin-top: 5px; font-size: 13px; color: var(--warn);
+              line-height: 1.4; }
+  #ee-inspect { margin-bottom: 9px; padding-bottom: 8px;
+                border-bottom: 1px solid var(--line); }
+  #insp-out { margin-top: 6px; font-size: 13px; }
+  #insp-out .insp-head { display: flex; gap: 6px; align-items: baseline;
+                         color: var(--muted); font-variant-numeric: tabular-nums; }
+  #insp-out .insp-head a { color: var(--accent); text-decoration: none;
+                           margin-left: auto; }
+  #insp-out .insp-head a:hover { text-decoration: underline; }
+  #insp-out .insp-season { color: var(--muted); margin-top: 2px; }
+  #insp-out .insp-none, #insp-out .insp-wait { color: var(--muted); margin-top: 5px; }
+  table.insp { width: 100%; border-collapse: collapse; margin-top: 5px;
+               font-variant-numeric: tabular-nums; }
+  table.insp th, table.insp td { padding: 2px 0 2px 4px; text-align: right; }
+  table.insp th:first-child, table.insp td:first-child { text-align: left;
+                                                         padding-left: 0; }
+  table.insp thead th { font-size: 11px; text-transform: uppercase;
+                        letter-spacing: .04em; color: var(--muted);
+                        border-bottom: 1px solid var(--line); }
+  /* The indices are derived from the six rows above them, so they are ruled off
+     rather than listed as if they were a seventh measurement. */
+  table.insp tr.idx td { border-top: 1px solid var(--line); font-weight: 500; }
+  table.insp td.na { color: var(--muted); }
+  #insp-out .insp-ov { margin-top: 7px; padding-top: 5px;
+                       border-top: 1px solid var(--line); }
+  #insp-out .insp-ov .ovl { color: var(--ink); font-weight: 500; }
+  #insp-out .insp-ov .ovv { font-variant-numeric: tabular-nums; }
+  #ee-layer-note { margin-top: 5px; font-size: 12px; color: var(--muted);
+                   line-height: 1.35; }
+
+  /* ── evidence ───────────────────────────────────────────────────────────
+     Open by default and visually apart from the collapsed model hint. The two
+     are not the same kind of thing: these fail independently of the model
+     (§P), the posterior does not. */
+  .ev-why { font-size: 13px; color: var(--muted); line-height: 1.45;
+            margin: -2px 0 7px; }
+  /* Four labelled blocks in the order an interpreter works in, and every value
+     rendered as the kind of thing it is: a class with its dataset's own
+     colour, a probability as a bar, an annual series as a row of colours. A
+     flat twenty-three-row table of words was legible only if you already knew
+     what each row meant. */
+  .ev-group { margin-top: 9px; }
+  .ev-group:first-child { margin-top: 3px; }
+  .ev-ghdr { font-size: 13.5px; font-weight: 450; color: var(--muted);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .ev-ghdr::after { content: ''; flex: 1 1 auto; height: 1px;
+                    background: var(--line); }
+  .ev-row { display: grid; grid-template-columns: minmax(70px, 38%) 1fr;
+    gap: 2px 8px; align-items: baseline; padding: 4px 0;
+    border-bottom: 1px solid var(--line-soft); }
+  .ev-row:last-child { border-bottom: none; }
+  .ev-name { font-size: 13px; color: var(--muted); line-height: 1.25; }
+  .ev-when { display: block; font-size: 11.5px; font-weight: 500; opacity: .8;
+             font-variant-numeric: tabular-nums; }
+  .ev-when.stale { color: var(--warn); opacity: 1; }
+  .ev-val { font-size: 13px; line-height: 1.3; }
+  .ev-cls { display: inline-flex; align-items: center; gap: 4px; }
+  .ev-cls i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto;
+              box-shadow: inset 0 0 0 1px var(--sw-edge); }
+  .ev-pair { display: inline-flex; align-items: center; gap: 5px;
+             flex-wrap: wrap; }
+  .ev-pair .arr { color: var(--muted); font-weight: 500; }
+  .ev-pair.diff .arr { color: var(--warn); }
+  .ev-bar { display: inline-block; width: 24px; height: 5px; border-radius: 3px;
+    background: var(--line); vertical-align: middle; overflow: hidden; }
+  .ev-bar i { display: block; height: 100%; background: var(--accent); }
+  .ev-num { font-variant-numeric: tabular-nums; margin-left: 3px; }
+  /* No red-for-up / green-for-down: more built and more tree are both "up" and
+     colouring the sign would say one of them is bad. */
+  .ev-delta { margin-left: 6px; font-size: 12px; font-weight: 500;
+              font-variant-numeric: tabular-nums; color: var(--ink); }
+  .ev-delta.flat { color: var(--muted); font-weight: 400; }
+  .ev-seq { display: inline-flex; gap: 1px; vertical-align: middle; }
+  .ev-seq i { position: relative; width: 13px; height: 18px; cursor: pointer;
+              box-shadow: inset 0 0 0 1px var(--sw-edge); }
+  .ev-seq i::after { content: ''; position: absolute; top: -3px; bottom: -3px;
+                     left: -3px; right: -3px; }
+  .ev-seq i:first-child { border-radius: 2px 0 0 2px; }
+  .ev-seq i:last-child  { border-radius: 0 2px 2px 0; }
+  .ev-seq-now { margin-left: 6px; }
+  .ev-none { font-size: 12px; color: var(--muted); line-height: 1.45;
+             padding: 6px 0; }
+  .ev-sub { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .ev-sub-lab { font-size: 13px; font-weight: 450; color: var(--muted); }
+  .ev-series { margin-left: auto; display: flex; gap: 4px; padding: 4px;
+               background: var(--tonal); border-radius: 999px; }
+  .ev-series button { border: none; background: none;
+    border-radius: 999px; padding: 3px 9px; cursor: pointer; font-size: 13px;
+    font-weight: 450; color: var(--ink); font-family: inherit; }
+  .ev-series button:hover { background: var(--hover); }
+  .ev-series button.on { background: var(--seg-on); color: var(--accent);
+    font-weight: 500; box-shadow: 0 1px 2px rgba(18,19,23,.10); }
+  .ev-series button.dense { margin-left: 4px; }
+  .ev-series button.dense.on { background: var(--seg-on); color: var(--ink); }
+  .ev-series button.dense.busy { color: var(--accent); opacity: .7; }
+  .ev-plot { position: relative; margin-top: 4px; }
+  .ev-plot svg { width: 100%; height: auto; display: block; }
+  .ev-plot .grid { stroke: var(--line); stroke-width: 1; }
+  .ev-plot .tick { font-size: 11px; fill: var(--muted); }
+  .ev-plot .band-lbl { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+  .ev-plot .ev-line { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+  .ev-plot .ev-line.faint { stroke-width: 1.2; opacity: .3; }
+  .ev-plot .dense-line { fill: none; stroke: var(--faint); stroke-width: .7;
+                         opacity: .55; }
+  .ev-plot .dense-dot { fill: var(--muted); opacity: .6; }
+  .dense-cap { font-size: 12px; color: var(--muted); line-height: 1.35;
+               margin-top: 2px; }
+  .ev-plot .ev-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1;
+                     cursor: pointer; }
+  .ev-plot .ev-dot.sel { stroke: var(--ink); stroke-width: 2; r: 6; }
+  .ev-plot .ev-target { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 2; }
+  .ev-plot .ev-cut { stroke: var(--nature); stroke-width: 1; stroke-dasharray: 2 3; }
+  .ev-plot .ev-cut-lbl { font-size: 10.5px; fill: var(--nature); }
+  .ev-plot .spec-line { fill: none; stroke-width: 1.5; opacity: .9; }
+  .ev-plot .spec-line.dim { opacity: .25; }
+  .ev-plot .spec-line.sel { stroke-width: 2.6; opacity: 1; }
+  .ev-tip { position: absolute; top: 0; background: rgba(17,17,17,.86);
+            color: #fff; font-size: 13px; padding: 3px 7px; border-radius: 5px;
+            pointer-events: none; white-space: nowrap; }
+  .spec-legend { display: flex; flex-wrap: wrap; gap: 3px 7px; margin-top: 4px; }
+  .spec-legend label { font-size: 12px; color: var(--ink); cursor: pointer;
+                       display: flex; align-items: center; gap: 3px; }
+  .spec-legend label.dim { opacity: .35; }
+  .spec-legend .sl-sw { width: 9px; height: 9px; border-radius: 2px; }
+  details.ev-fold { margin-top: 10px; border: none;
+                    border-radius: 16px; padding: 8px 11px; background: var(--tonal); }
+  details.ev-fold summary { cursor: pointer; font-size: 12px; font-weight: 500;
+                            color: var(--muted); }
+
+  /* MapLibre's own bottom controls -- the scale bar and the attribution ⓘ --
+     must outrank the filmstrip (z-index 3). The attribution control also needs
+     to sit to the left of the floating labelling panel; otherwise the panel
+     covers it completely. Clamp its offset on very narrow screens so it stays
+     inside the viewport. */
+  .maplibregl-ctrl-bottom-left { z-index: 4; }
+  .maplibregl-ctrl-bottom-right {
+    z-index: 5;
+    right: min(calc(var(--panel-w, 430px) + 18px), calc(100% - 42px));
+    bottom: 8px;
+  }
+
+  /* ── the Sentinel-2 filmstrip ───────────────────────────────────────────── */
+  #ev-film { position: absolute; left: 10px; bottom: 8px; z-index: 3;
+             right: calc(var(--panel-w, 430px) + 28px);
+             pointer-events: none; }
+  #ev-chip-controls { display: flex; gap: 8px; align-items: center;
+    pointer-events: auto; background: var(--glass-2);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 999px; padding: 4px 10px; font-size: 12px; width: fit-content;
+    margin-bottom: 5px; border: 1px solid var(--glass-edge); }
+  #ev-chip-controls select { font-size: 12px; padding: 2px 5px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+    color: inherit; font-family: inherit; }
+  #ev-chip-controls .chip-w { display: flex; align-items: center; gap: 5px;
+    color: var(--muted); }
+  #ev-chip-controls input[type=range] { width: 90px; }
+  .chip-legend:empty { display: none; }
+  .chip-legend { display: flex; align-items: center; gap: 5px; }
+  .chip-legend .ramp { display: block; width: 54px; height: 8px;
+                       border-radius: 2px; border: 1px solid var(--line); }
+  .chip-legend .ends { color: var(--muted); font-size: 12px;
+                       font-variant-numeric: tabular-nums; }
+  /* `width: fit-content` because this is a CLICK TARGET as wide as the window.
+     `#ev-film` is left:10/right:10 and correctly `pointer-events: none`, but the
+     strip inside it re-enables them across the full width to be scrollable --
+     so the empty space to the right of nine chips was swallowing clicks aimed at
+     whatever is under it. That is the map's bottom-right corner, where MapLibre
+     puts the attribution ⓘ: the button was reachable by keyboard, drawn in the
+     right place, and dead to the mouse. Capped at 100% so a narrow window still
+     scrolls rather than overflowing. */
+  #ev-strip { display: flex; gap: 6px; overflow-x: auto; pointer-events: auto;
+              padding-bottom: 8px; width: fit-content; max-width: 100%;
+              scrollbar-gutter: stable; }
+  #ev-strip .chip { position: relative; width: 88px; height: 88px; flex-shrink: 0;
+    border-radius: 10px; overflow: hidden; background: rgba(17,17,17,.6);
+    border: 2px solid transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; }
+  #ev-strip .chip.sel { border-color: var(--accent); }
+  /* A baked sprite is positioned against the BORDER box, not the padding box.
+     Both are geometrically exact -- the slice lands on the right cell either
+     way -- but the default inset the image by the 2 px transparent border and
+     left a sliver of the colour tint showing down each edge. */
+  #ev-strip .chip.baked { background-origin: border-box;
+                          background-clip: border-box; }
+  /* The cell already carries the year's colour under the current scheme,
+     mixed from the baked bands. Only the sheen animates, so a strip of nine
+     reads as a sequence of colours the moment the point opens rather than as
+     nine grey boxes for the next half minute. */
+  #ev-strip .chip.tinted { background-image:
+      linear-gradient(160deg, rgba(255,255,255,.16), rgba(0,0,0,.22)); }
+  #ev-strip .chip.tinted .ld { position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%,
+      rgba(255,255,255,.35) 50%, transparent 70%);
+    background-size: 260% 100%; animation: chipwait 1.5s linear infinite; }
+  @keyframes chipwait { from { background-position: 130% 0; }
+                        to   { background-position: -130% 0; } }
+
+  /* ── one spinner ─────────────────────────────────────────────────────────
+     The chips had a shimmer and the dense button had a word, and everything
+     else that waits -- the batch download, the Wayback release index, a sync in
+     flight -- said nothing at all or said it in text that reads exactly like a
+     finished state. `…` is not a progress indicator: it does not move, so
+     "sending 3…" and a wedged request are the same pixels.
+
+     `currentColor`, so it inherits whatever it is dropped into and needs no
+     variant per context. Honours prefers-reduced-motion, where it becomes a
+     static ring rather than disappearing -- the point is to say "not done yet",
+     which a still ring does and nothing does. */
+  .spin { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em;
+          border: 2px solid currentColor; border-right-color: transparent;
+          border-radius: 50%; opacity: .65; animation: spin .7s linear infinite;
+          flex: 0 0 auto; }
+  .spin.lg { width: 22px; height: 22px; border-width: 2.5px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spin { animation: none; }
+    #ev-strip .chip.tinted .ld { animation: none; }
+  }
+  #loading-msg .spin { margin-right: 8px; }
+  #ev-strip .chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #ev-strip .chip .yr { position: absolute; left: 3px; top: 2px; z-index: 2;
+    background: rgba(17,17,17,.72); color: #fff; font-size: 12px; font-weight: 500;
+    padding: 0 4px; border-radius: 3px; }
+  #ev-strip .chip .ld { color: #fff; font-size: 17px; opacity: .8; }
+  #ev-strip .chip:not(.tinted) .ld::after { content: '…'; }
+  /* No cloud-free composite that year. Said, rather than shown as the black
+     square Earth Engine actually returns for an empty collection. */
+  #ev-strip .chip.nodata { background: repeating-linear-gradient(45deg,
+      #2b303b, #2b303b 5px, #343a46 5px, #343a46 10px); }
+  #ev-strip .chip.nodata::after { content: 'no clear'; color: #9aa4b2;
+    font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; }
+  #ev-strip .chip .chip-zoom, #ev-strip .chip .chip-retry {
+    position: absolute; right: 3px; bottom: 3px; z-index: 2; border: none;
+    background: rgba(17,17,17,.72); color: #fff; border-radius: 4px;
+    min-width: 24px; min-height: 22px;
+    padding: 2px 6px; cursor: pointer; font-size: 13.5px; }
+  #ev-strip-note:empty { display: none; }
+  #ev-strip-note .chip-off { pointer-events: auto;
+    background: var(--glass-2);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge); border-radius: 12px; padding: 6px 10px;
+    font-size: 12px; color: var(--muted); line-height: 1.45; max-width: 560px;
+    margin-top: 5px; }
+  /* Same box, different claim. `chip-off` reports something that is not
+     working; `calm` reports something that is working as designed and looks
+     identical on screen -- a flat strip, an index waiting on Earth Engine.
+     Given the same grey they were read as the same message. */
+  #ev-strip-note .chip-off.calm { border-left: 3px solid var(--accent);
+                                  color: var(--ink); }
+  #ev-strip-note .chip-off button { margin-left: 6px; border: none;
+    background: var(--accentbg); color: var(--accent); border-radius: 999px;
+    padding: 3px 11px; cursor: pointer; font-weight: 450; font-size: 12px;
+    font-family: inherit; }
+
+  /* A capture date the service gives only to the month or the year is still a
+     usable provenance note, and saying which it is stops it being read as a
+     day. (The other non-answer, "no dated survey", is italic in the same
+     read-out and needs no rule.) */
+  #wb-meta .dim, #wb-click .dim { opacity: .6; }
+
+  /* ── chip lightbox ──────────────────────────────────────────────────────
+     It owns the arrow keys while it is up; point navigation is on the same two
+     keys and stepping to the next point while looking at an enlarged chip is
+     not what anybody meant. */
+  #lightbox { position: fixed; top: 0; bottom: 0; left: 0;
+    right: calc(var(--panel-w, 430px) + 24px); z-index: 120;
+    background: rgba(0,0,0,.84);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; }
+  /* Narrow windows have no room for both; there the chip takes the lot and
+     the linked readings are a close away. */
+  @media (max-width: 900px) { #lightbox { right: 0; } }
+  #lightbox.on { display: flex; }
+  /* While the lightbox is up the panel beside it has one job: show the two
+     readings the year-stepping drives. The standing explanations are ~150px of
+     prose that is read once, on the first point of a batch, and they are what
+     pushed the index chart below the fold. */
+  body.lb-open #sec-evidence .ev-why,
+  body.lb-open #sec-evidence .dense-cap { display: none; }
+  /* The same argument, now that the head is the whole form: while a year is
+     enlarged the interpreter is reading evidence, not filling anything in, and
+     ~570 px of pinned form is the other thing that pushes the spectral profile
+     below the fold. The form is not hidden -- it keeps its own scroller, and
+     the read-out, the call flags and the buttons stay pinned under it, because
+     they are what an enlarged year is being read *for*. */
+  body.lb-open #panel-head { max-height: 24%; }
+  /* ONE FIXED SQUARE, and every year draws inside it.
+     The placeholder and the composite used to be sized by two different rules
+     -- `min(92%,64vh)` on a div and `max-width:92%/max-height:64vh` on an img
+     -- so each year that landed resized the picture and nudged the caption and
+     the buttons. Stepping four years meant eight reflows. Chips are square by
+     construction (`dimensions:` on a square region), so the stage is square
+     and both fill it. */
+  #lb-stage { position: relative; width: min(92%, 64vh); aspect-ratio: 1;
+    border-radius: 12px; background: #111; overflow: hidden; }
+  /* The baked sprite, under everything. It is correct for the current year the
+     instant the year changes -- one `background-position` -- so there is never
+     a blank stage, with Earth Engine connected or not. `pixelated` is
+     deliberate: a 176 px cell blown up to 64vh is magnified 4x and smoothing it
+     makes it read as a soft photograph rather than as the placeholder it is. */
+  #lb-slice { position: absolute; inset: 0; background: #111 no-repeat;
+    background-size: 100% 100%; image-rendering: pixelated; }
+  #lb-layers { position: absolute; inset: 0; }
+  /* One <img> per year, all kept. A year already looked at costs a class
+     change and no network, which is what makes `play` smooth. The incoming
+     frame fades in ON TOP of the outgoing one (z-index, then the outgoing is
+     dropped once the fade is over), so the sprite underneath never shows through
+     the gap -- a cross-fade that reveals the placeholder mid-way is worse than
+     a hard cut. */
+  #lb-layers img { position: absolute; inset: 0; width: 100%; height: 100%;
+    max-width: none; max-height: none; border-radius: 0; object-fit: contain;
+    opacity: 0; z-index: 1; transition: opacity 110ms linear; }
+  #lb-layers img.on { opacity: 1; z-index: 2; }
+  /* While it is playing, cutting hard is the honest thing: a fade blends two
+     years into a third picture that is not a reading of anything. */
+  #lightbox.playing #lb-layers img { transition: none; }
+  /* There was a `#lightbox img { max-width: 92%; max-height: 64vh }` here, and
+     it is gone rather than overridden: it is the same specificity as
+     `#lb-layers img` and declared after it, so it won -- the frames came back
+     sized by the rule the stage exists to replace. The stage is the only thing
+     that sizes a chip now. */
+  #lightbox .lb-cap { color: #fff; font-size: 16px; font-weight: 500; }
+  #lightbox .lb-nav { display: flex; gap: 10px; align-items: center; }
+  #lightbox .lb-nav button, #lightbox .lb-close {
+    border: 1px solid #555; background: #1c1c1c; color: #fff; border-radius: 6px;
+    padding: 5px 12px; cursor: pointer; font-size: 15px; }
+  #lightbox #lb-play { min-width: 88px; }
+  #lightbox #lb-play[aria-pressed="true"] { border-color: #9ecbff; color: #9ecbff; }
+  #lightbox .lb-speed { display: flex; align-items: center; gap: 6px;
+    color: #ccc; font-size: 13px; }
+  #lightbox .lb-speed input { width: 90px; }
+  #lightbox .lb-speed span { min-width: 34px; }
+  /* The year ruler. During playback the caption is the only thing that moves
+     and it is text; this says where in the nine years the film is, and clicking
+     a tick steps straight to that year.
+     It gets its OWN ground rather than sitting on the 84%-dimmed backdrop: the
+     chip strip is at the foot of the map, directly behind this, and its cells
+     carry year labels of their own -- two rows of years 10 px apart read as one
+     confusing row. */
+  #lightbox .lb-ticks { display: flex; gap: 4px; flex-wrap: wrap;
+    justify-content: center; background: rgba(0,0,0,.72);
+    border-radius: 999px; padding: 5px 9px; }
+  #lightbox .lb-ticks button {
+    border: 1px solid #444; background: #161616; color: #999;
+    border-radius: 5px; padding: 2px 7px; cursor: pointer; font-size: 12px;
+    font-family: inherit; }
+  #lightbox .lb-ticks button.on {
+    border-color: #9ecbff; background: #22313f; color: #fff; }
+  /* A year with no composite is not a frame the film can show, so it is not
+     one the ruler offers either -- there would be nothing on the stage. */
+  #lightbox .lb-ticks button.nodata { color: #666; border-style: dashed;
+    cursor: default; }
+  #lightbox .lb-ticks button:disabled { cursor: default; }
+  #lightbox .lb-close { position: absolute; top: 16px; right: 20px; }
+
+  /* ── overlays ───────────────────────────────────────────────────────── */
+  #loading {
+    position: fixed; inset: 0; background: var(--veil); z-index: 50;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    gap: 8px; text-align: center; padding: 24px;
+  }
+  #loading .msg { font-size: 16px; font-weight: 500; }
+  #loading .sub { font-size: 13.5px; color: var(--muted); max-width: 560px;
+                  line-height: 1.5; }
+  #loading .sub b { color: var(--ink); }
+  #loading .sub.left { text-align: left; }
+  #loading .sub ol { margin: 8px 0 0 18px; }
+  #loading .sub li { margin-bottom: 7px; }
+  #loading button.go { padding: 11px 24px; border-radius: 999px; border: none;
+    background: var(--btn-fill); color: var(--btn-ink); cursor: pointer; font-size: 15px;
+    font-weight: 500; margin-top: 14px; font-family: inherit; }
+  #loading button.go.secondary { background: var(--control); color: var(--ink);
+    border: 1px solid var(--line-strong); font-weight: 450; }
+  #loading button.go.secondary:hover { background: var(--control-hover); }
+  #loading .go-row { display: flex; flex-wrap: wrap; gap: 8px;
+                     justify-content: center; margin-top: 14px; }
+  #loading .go-row button.go { margin-top: 0; }
+  /* The list rows in the deferred / pick-a-batch dialogs. */
+  #loading button.pick { display: block; width: 100%; text-align: left;
+    margin: 4px 0; padding: 9px 14px; border-radius: 16px; font-family: inherit;
+    border: 1px solid var(--line-strong); background: var(--control);
+    cursor: pointer; font-size: 14px; color: var(--ink); }
+  #loading button.pick:hover { background: var(--control-hover); }
+  #loading button.pick.dim { opacity: .55; }
+  #loading input.name { font-size: 16px; padding: 9px 16px; width: 220px;
+    border: 1px solid var(--line-strong); border-radius: 999px; margin-top: 10px;
+    background: var(--control); color: var(--ink); font-family: inherit; }
+  #drop-hint {
+    position: fixed; inset: 0; background: var(--dropbg); z-index: 60;
+    border: 3px dashed var(--accent); display: none; align-items: center;
+    justify-content: center; font-size: 18px; font-weight: 500; color: var(--accent);
+  }
+  body.dragging #drop-hint { display: flex; }
+
+  kbd { background: var(--control); border: 1px solid var(--line-strong);
+        border-radius: 6px; padding: 0 5px; font-size: 13px;
+        font-family: inherit; color: var(--muted); }
+  /* The type scale is Weather Lab's and it holds down to about 800 px of
+     window. Below that the pinned form stops fitting, and what falls off the
+     bottom of `#panel-head-scroll` first is CONFIDENCE -- which is required to
+     save. A control the interpreter has to go looking for in order to finish
+     the point is worse than a control set one notch smaller, so 1366x768 and
+     1280x720 (both common, both a laptop lid) step the base down. It is still
+     larger than the 11.5 px this app used before the scale came up. */
+  @media (max-height: 780px) {
+    body { font-size: 13px; }
+    #ctrl-right {
+      top: 10px; right: calc(var(--panel-w, 430px) + 20px); width: 260px;
+      max-height: calc(100% - 20px); border-radius: 30px;
+    }
+    .controls-head { min-height: 48px; padding: 7px 11px 6px 16px; }
+    .controls-head .title { font-size: 18px; }
+    #btn-cards { padding: 4px 9px; font-size: 11.5px; }
+    .card { padding: 6px 12px 8px 16px; font-size: 12.5px; }
+    .card > .hdr { min-height: 24px; font-size: 13.5px; gap: 6px; }
+    .card label { gap: 7px; padding: 0; line-height: 1.2; }
+    .card input[type=checkbox] { width: 16px; height: 16px; border-radius: 4px; }
+    .card input[type=checkbox]:checked::after { width: 4px; height: 8px; }
+    .card label.master { padding: 5px 7px; margin-bottom: 3px; border-radius: 15px; }
+    .card label.master input { width: 48px; height: 30px; padding: 3px; }
+    .card label.master input::after,
+    .card label.master input:checked::after { width: 22px; height: 22px; margin: 0; }
+    .card label.master input:checked::after { transform: translateX(18px); }
+    .card .note { font-size: 11.5px; margin-top: 3px; line-height: 1.25; }
+    .card select, .card input[type=text] { font-size: 13px; padding: 3px 8px; }
+    .card button { font-size: 13px; padding: 4px 9px; }
+    .card .row { margin-top: 2px; }
+    .sec { margin-top: 8px; }
+    .sec > .lab { margin-bottom: 4px; }
+    #panel-head { padding: 9px 13px 7px; max-height: 88%; }
+    #panel-scroll { min-height: 78px; }
+    .choice { padding: 6px 4px; gap: 3px; }
+    .flag { padding: 3px 9px; }
+    .conf button { padding: 4px 4px; }
+    #transition-out { padding: 8px; }
+    textarea#notes { min-height: 32px; }
+    .actions button { padding: 9px 14px; }
+  }
